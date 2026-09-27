@@ -11,3 +11,7 @@
 ## Seaglass
 
 Clear Horizon の別案。同じ色とテーマで、単体モチーフと図形のバーストを2拍ごとにビートで切り替える15秒シームレスループ（96 BPM）→ [`seaglass/`](seaglass/)（[動画](seaglass/seaglass.mp4)、[After Effects でネイティブのシェイプレイヤーとして組み立てるスクリプト](seaglass/README.md#after-effects-で編集する)）
+
+## Sundial
+
+第3案。カラーサンプルの海辺の部屋をもとに、夜明け前から次の夜明け前までの一日を30秒のシームレスループにしました。窓から差す光が日時計のように床を回り、昼の6カットの連打と正午の完全な静止で緩急をつけています（96 BPM）→ [`sundial/`](sundial/)（[動画](sundial/sundial.mp4)）
