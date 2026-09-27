@@ -1,0 +1,13 @@
+{
+  "name": "seaglass",
+  "private": true,
+  "type": "module",
+  "description": "A 15-second seamless geometric sea-and-sky loop rendered from canvas code.",
+  "scripts": {
+    "render": "node render.mjs",
+    "stills": "node render.mjs --stills 0,120,240,360,480,600,720,840"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
