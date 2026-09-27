@@ -1,0 +1,847 @@
+<meta charset="utf-8">
+<title>Clear Horizon</title>
+<meta name="description" content="A fifteen-second seamless loop that dives from a windy summer sky through the sea surface and back, drawn with dots, lines and shapes in canvas code, with a synthesized 96 BPM soundtrack.">
+<style>
+@font-face{font-family:"Martian Mono";src:url("fonts/martian-mono-500.woff2") format("woff2");font-weight:500;font-display:block}
+
+/* Page: one airy light look, painted explicitly (the piece itself is the colour). */
+:root{
+  color-scheme:light;
+  --ground:#EEF8FE; --panel:#F8FCFF; --line:#C9E6F6; --ink:#16467A; --muted:#5782AE;
+  --azure:#1FA2E8; --lav:#B8B0F5;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{font:14px/1.6 "Martian Mono",ui-monospace,"DejaVu Sans Mono",monospace;padding-inline:clamp(16px,4vw,48px);padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px}
+h1{margin:0;font-size:clamp(22px,3.6vw,36px);font-weight:500;letter-spacing:.06em;line-height:1.15;text-transform:uppercase;text-wrap:balance}
+h1 span{color:var(--azure)}
+.meta{margin:0;color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.screen{position:relative;aspect-ratio:16/9;max-width:100%;background:#78C8F8}
+.screen canvas{display:block;width:100%;height:100%}
+.bigplay{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;border:0;background:var(--azure);color:#fff;cursor:pointer;display:grid;place-items:center;transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.bigplay:hover{transform:scale(1.07)}
+.bigplay svg{width:28px;height:28px;margin-left:4px}
+.controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px}
+.pp{min-width:92px;padding:9px 16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.pp:hover{border-color:var(--azure)}
+input[type=range]{width:100%;accent-color:var(--azure)}
+.tc{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{margin:0;color:var(--muted);font-size:12px;max-width:68ch}
+:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+@media (max-width:520px){.controls{grid-template-columns:auto 1fr}.tc{grid-column:1/-1}}
+body.render{padding:0;margin:0;background:#000}
+body.render .ui{display:none!important}
+body.render .wrap{max-width:none;display:block}
+body.render .screen{width:1920px;height:1080px}
+</style>
+
+<div class="wrap">
+  <header class="ui">
+    <h1>Clear Horizon<span>.</span></h1>
+    <p class="meta">15 s seamless loop · 96 bpm · 6 bars · 1920×1080 · 60p</p>
+  </header>
+  <div class="screen">
+    <canvas id="c" width="1920" height="1080" aria-label="Looping animation: a camera rides the wind over a dotted sea, dives under the surface and rises back into the sky"></canvas>
+    <button id="big" class="bigplay ui" type="button" aria-label="Play the loop with sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l16 9-16 9z" fill="currentColor"/></svg></button>
+  </div>
+  <div class="controls ui">
+    <button id="pp" class="pp" type="button">Play</button>
+    <input id="scrub" type="range" min="0" max="899" step="1" value="0" aria-label="Position in the loop">
+    <span id="tc" class="tc">00.00 s · bar 1</span>
+  </div>
+  <p class="note ui">Picture and music loop together every 15 seconds. The camera skims the sea, dives, looks up at the waves from below and breaks back into the wind; the music goes muffled underwater and opens again at the surface. Everything is drawn live by the code on this page.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const Q = new URLSearchParams(location.search);
+const RENDER = Q.has('render');
+const SHOW_HUD = Q.has('hud');                 // the clean loop has no overlay; ?hud brings the reel's HUD back
+// Layer passes for compositing (After Effects): draw one element group on transparency.
+// Listed bottom to top; stacked in this order they rebuild the frame.
+const PASSES = ['sky', 'clouds', 'birds', 'sea', 'glitter', 'speed', 'motes', 'wind', 'under', 'under-life', 'waterline', 'splash'];
+let PASS = null;
+const want = p => !PASS || PASS === p;
+if (RENDER) document.body.classList.add('render');
+
+const W = 1920, H = 1080, FPS = 60, L = 15, FRAMES = L * FPS;
+const BPM = 96, BEAT = 60 / BPM, BAR = 4 * BEAT;          // 6 bars of 2.5 s = one 15 s loop
+const TAU = Math.PI * 2;
+
+// Palette taken from the reference: white-led, azure sky, deep-blue horizon → turquoise → pale aqua,
+// with lavender (and a breath of pink) as the only accents.
+const C = {
+  skyTop: '#2E9CF0', skyMid: '#78C8F8', skyLow: '#CDEEFF', haze: '#EEFAFF',
+  seaFar: '#1D6FD1', seaMid: '#1FA2E8', seaNear: '#3BD0E9', seaPale: '#A5F0F4',
+  uwTop: '#C8F6FB', uwSurf: '#4CCBEA', uwMid: '#1C86DE', uwDeep: '#1350B9',
+  white: '#FFFFFF', lav: '#B8B0F5', pink: '#F7CADD', sun: '#FFF3B5'
+};
+const F = { mono: px => `500 ${px}px "Martian Mono", "DejaVu Sans Mono", monospace` };
+
+/* ------------------------------------------------------------------ *
+ *  Periodic helpers — every animated value repeats exactly every L
+ * ------------------------------------------------------------------ */
+const frac = x => x - Math.floor(x);
+const cyc = (t, n = 1, o = 0) => frac(n * t / L + o);
+const osc = (t, n = 1, o = 0) => Math.sin(TAU * (n * t / L + o));
+const wrapT = t => ((t % L) + L) % L;
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const prog = (a, b, x) => clamp((x - a) / (b - a));
+const outCubic = t => 1 - Math.pow(1 - t, 3);
+const inOutCubic = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const hash = n => frac(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const hexRgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const rgba = (h, a) => { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; };
+function setFont(c, f, ls = 0) { c.font = f; c.letterSpacing = ls + 'px'; }
+
+const main = document.getElementById('c');
+const mctx = main.getContext('2d');
+const SUB = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; })();
+
+/* ------------------------------------------------------------------ *
+ *  Camera. Twelve keys per loop (every half bar), joined by a periodic
+ *  Catmull-Rom spline, so position AND velocity match at the loop point.
+ * ------------------------------------------------------------------ */
+function loopSpline(keys) {
+  const n = keys.length;
+  return t => {
+    const u = frac(t / L) * n, i = Math.floor(u), f = u - i;
+    const p0 = keys[(i - 1 + n) % n], p1 = keys[i % n], p2 = keys[(i + 1) % n], p3 = keys[(i + 2) % n];
+    return .5 * (2 * p1 + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
+  };
+}
+const d2r = Math.PI / 180;
+const CAM = {
+  //      sky ···························· skim ········ dive ········· under ········ breach ···· sky
+  h:    [380, 330, 250, 140,  50,  14, -120, -300, -260, -100, 150, 330],     // height above the water
+  hz:   [230, 260, 140,  40,   0, -30,  -80, -170,  110,   40, 130, 230],     // horizon offset, px below centre
+  roll: [-9,  -4,    7,  12,   4,  -3,   -9,   -5,    6,   10,   0,  -7],     // degrees
+  f:    [900, 960, 1080, 1220, 1150, 1000, 880, 840, 960, 1100, 1040, 930],   // focal length, px
+  v:    [420, 480, 720, 1000, 980, 760,  620, 440,  520,  860,  940, 600],    // forward speed
+  x:    [0,   70, 150,  130,  40,  -70, -130, -90,   20,  100,   70,  20]     // sideways sway
+};
+const camH = loopSpline(CAM.h), camHz = loopSpline(CAM.hz), camRoll = loopSpline(CAM.roll.map(d => d * d2r));
+const camF = loopSpline(CAM.f), camV = loopSpline(CAM.v), camX = loopSpline(CAM.x);
+const DZ = 110;                                 // world spacing of dot rows
+const DIST = (() => {                           // forward distance, integrated from the speed spline
+  const n = L * 240, d = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) d[i + 1] = d[i] + camV((i + .5) / 240) / 240;
+  // scale so one loop covers an even whole number of rows: the dot grid lands exactly where it started
+  const S = Math.round(d[n] / (2 * DZ)) * 2 * DZ, k = S / d[n];
+  for (let i = 0; i <= n; i++) d[i] *= k;
+  return { d, n, S };
+})();
+function camD(t) {
+  const u = wrapT(t) * 240, i = Math.min(DIST.n - 1, Math.floor(u)), f = u - i;
+  return lerp(DIST.d[i], DIST.d[i + 1], f);
+}
+function camera(t) {
+  const punch = 1 + .035 * Math.exp(-frac(wrapT(t) / BAR) * BAR * 5);   // the frame breathes on each downbeat
+  return { t, h: camH(t), hz: camHz(t), roll: camRoll(t), f: camF(t) * punch, v: camV(t), x: camX(t), D: camD(t) };
+}
+// moments the camera passes through the surface (found once, used for splashes and sound)
+const CROSS = (() => {
+  const out = [];
+  for (let i = 0; i < 1500; i++) {
+    const a = camH(i / 100), b = camH((i + 1) / 100);
+    if ((a > 0) !== (b > 0)) out.push({ t: (i + a / (a - b)) / 100, down: a > 0 });
+  }
+  return out;
+})();
+const DIVE = CROSS.find(c => c.down).t, BREACH = CROSS.find(c => !c.down).t;
+
+/* ------------------------------------------------------------------ *
+ *  The sea: a perspective field of dots over a wave-height function.
+ *  Wave numbers along z are whole multiples of 2π/S, so after one loop
+ *  (the camera has travelled S) the water is exactly where it began.
+ * ------------------------------------------------------------------ */
+const ZN = 250, ZF = 6400;
+const KZ = [1500, 720, 420].map(lam => TAU * Math.round(DIST.S / lam) / DIST.S);
+function seaH(x, zw, t) {
+  return 22 * Math.sin(zw * KZ[0] + x * .0005 + TAU * 2 * t / L)
+       + 10 * Math.sin(-zw * KZ[1] + x * .0021 + TAU * 3 * t / L + 1.3)
+       + 5 * Math.sin(zw * KZ[2] + x * .0049 - TAU * 5 * t / L + .4);
+}
+const EXT = 1180;                                // half-extent of the rolled frame we must cover
+const ROW_COLS_ABOVE = [
+  ['#E4FCFF', '#FFFFFF'], ['#CFF6FC', '#FFFFFF'], ['#B7EDF9', '#F4FDFF'],
+  ['#A3E2F7', '#E6F8FF'], ['#93D5F4', '#D9F2FE'], ['#8CCBF1', '#D2EEFD']
+];
+const ROW_COLS_UNDER = [
+  ['#2A9BE0', '#FFFFFF'], ['#34A8E5', '#FFFFFF'], ['#43B6E8', '#F4FDFF'],
+  ['#55C2EB', '#EAFBFF'], ['#66CCEE', '#E0F8FF'], ['#76D4F0', '#DAF6FF']
+];
+function drawDots(c, t, cam, h0, cols) {
+  const nb = cols.length, paths = cols.map(() => [new Path2D(), new Path2D()]);
+  const phase = cam.D % DZ, rowBase = Math.floor(cam.D / DZ);
+  for (let k = Math.ceil((ZN + phase) / DZ); k * DZ - phase <= ZF; k++) {
+    const zr = k * DZ - phase, s = cam.f / zr, zw = zr + cam.D;
+    const Yb = cam.hz + h0 * s;
+    if (Yb < -EXT - 60 || Yb > EXT + 60) continue;
+    const dx = 64, odd = (k + rowBase) % 2 ? dx / 2 : 0;
+    const xmin = cam.x - EXT / s, xmax = cam.x + EXT / s;
+    const rad = Math.min(9, .7 + 3 * s);
+    const bk = Math.min(nb - 1, Math.floor((zr - ZN) / (ZF - ZN) * nb * 1.35));
+    for (let x = Math.floor(xmin / dx) * dx + odd; x <= xmax; x += dx) {
+      const h = seaH(x, zw, t), X = (x - cam.x) * s, Y = cam.hz + (h0 - h) * s;
+      const crest = h > 17;
+      const rr = rad * (crest ? 1.25 : 1);
+      const p = paths[bk][crest ? 1 : 0];
+      p.moveTo(X + rr, Y); p.arc(X, Y, rr, 0, TAU);
+    }
+  }
+  for (let b = nb - 1; b >= 0; b--) {
+    c.fillStyle = cols[b][0]; c.fill(paths[b][0]);
+    c.fillStyle = cols[b][1]; c.fill(paths[b][1]);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Glitter — one sparkle per sixteenth note, sitting on the water and
+ *  streaming toward the camera with it. Most gather on the sun's path.
+ * ------------------------------------------------------------------ */
+const SUN_AZ = .42, SUN_EL = .38;
+const GLITTER = Array.from({ length: 96 }, (_, j) => {
+  const onPath = hash(j * 1.7) < .7;
+  const z = 700 + Math.pow(hash(j * 5.3), 1.6) * 3600;
+  const x = onPath ? SUN_AZ * z + (hash(j * 3.1) - .5) * (120 + z * .1) : (hash(j * 7.7) - .5) * z * 2;
+  return { t: j * BEAT / 4, x, z, big: hash(j * 9.1) < .18 };
+});
+function star(c, x, y, r) {
+  c.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4 - Math.PI / 2, rr = k % 2 ? r * .13 : r;
+    if (k === 0) c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  c.closePath(); c.fill();
+}
+function drawGlitter(c, t, cam, h0) {
+  c.fillStyle = C.white;
+  for (const g of GLITTER) {
+    const age = wrapT(t - g.t); if (age > .7) continue;
+    let dD = cam.D - camD(g.t); if (dD < 0) dD += DIST.S;
+    const zr = g.z - dD; if (zr < ZN) continue;
+    const s = cam.f / zr, e = (1 - Math.exp(-age * 30)) * Math.exp(-age * 5);
+    const X = (g.x - cam.x) * s, Y = cam.hz + (h0 - seaH(g.x, zr + cam.D, t)) * s;
+    const r = (g.big ? 26 : 14) * Math.min(2.2, .45 + s) * e;
+    if (r < .4) continue;
+    c.globalAlpha = .35 * e; c.beginPath(); c.arc(X, Y, r * .5, 0, TAU); c.fill();
+    c.globalAlpha = 1; star(c, X, Y, r);
+    if (g.big) { c.save(); c.translate(X, Y); c.rotate(Math.PI / 4); star(c, 0, 0, r * .55); c.restore(); }
+  }
+  c.globalAlpha = 1;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Above water: sky, sun, light bands, racing clouds, birds
+ * ------------------------------------------------------------------ */
+function drawSky(c, t, cam) {
+  const g = c.createLinearGradient(0, cam.hz - 1500, 0, cam.hz);
+  g.addColorStop(0, C.skyTop); g.addColorStop(.6, C.skyMid); g.addColorStop(.92, C.skyLow); g.addColorStop(1, C.haze);
+  c.fillStyle = g; c.fillRect(-EXT - 40, cam.hz - 2600, 2 * EXT + 80, 2600);
+  const z = cam.f / 1000, sx = SUN_AZ * cam.f, sy = cam.hz - SUN_EL * cam.f;
+  // wide diagonal light bands fanning from the sun
+  for (let k = 0; k < 4; k++) {
+    const a = .5 + k * .32 + .05 * osc(t, 2, k * .2), w = (.05 + .03 * k) * (1 + .3 * osc(t, 3, k * .3));
+    c.fillStyle = `rgba(255,255,255,${.1 + .05 * osc(t, 6, k * .17)})`;
+    c.beginPath(); c.moveTo(sx, sy);
+    c.lineTo(sx + Math.cos(a - w) * 3000, sy + Math.sin(a - w) * 3000); c.lineTo(sx + Math.cos(a + w) * 3000, sy + Math.sin(a + w) * 3000);
+    c.closePath(); c.fill();
+  }
+  const glow = c.createRadialGradient(sx, sy, 40 * z, sx, sy, 520 * z);
+  glow.addColorStop(0, 'rgba(255,253,240,0.95)'); glow.addColorStop(.3, 'rgba(255,253,240,0.35)'); glow.addColorStop(1, 'rgba(255,253,240,0)');
+  c.fillStyle = glow; c.fillRect(sx - 520 * z, sy - 520 * z, 1040 * z, 1040 * z);
+  // a ring leaves the sun on every bar; two dashed orbits counter-rotate
+  c.lineWidth = 2.5;
+  for (let j = 0; j < 2; j++) {
+    const age = frac(wrapT(t) / BAR) + j; if (age > 1.6) continue;
+    const q = age / 1.6;
+    c.strokeStyle = `rgba(255,255,255,${.9 * Math.pow(1 - q, 1.4)})`;
+    c.beginPath(); c.arc(sx, sy, (80 + 380 * outCubic(q)) * z, 0, TAU); c.stroke();
+  }
+  c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.lineCap = 'round';
+  c.setLineDash([3, 13]); c.lineDashOffset = -16 * cyc(t, 8);
+  c.beginPath(); c.arc(sx, sy, 128 * z, 0, TAU); c.stroke();
+  c.setLineDash([36, 20]); c.lineDashOffset = 56 * cyc(t, 5);
+  c.beginPath(); c.arc(sx, sy, 166 * z, 0, TAU); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle = C.white; c.beginPath(); c.arc(sx, sy, 76 * z, 0, TAU); c.fill();
+  c.fillStyle = C.sun; c.beginPath(); c.arc(sx, sy, 62 * z, 0, TAU); c.fill();
+}
+// Clouds: stacks of white bars with a lavender underside, racing downwind in three parallax layers.
+const CLOUDS = Array.from({ length: 11 }, (_, i) => {
+  const r = rng(40 + i), layer = i % 3;
+  return {
+    layer, x0: r(), el: .5 + r() * .9 - layer * .12, th: [13, 19, 27][layer],
+    rows: Array.from({ length: 2 + Math.floor(r() * 2) }, () => [(r() - .3) * 120, 140 + r() * 260])
+  };
+});
+function drawClouds(c, t, cam) {
+  const z = cam.f / 1000, span = 2 * EXT + 900;
+  for (const cl of CLOUDS) {
+    const n = cl.layer + 1;
+    const x = -EXT - 450 + cyc(t, n, cl.x0) * span;
+    const y = cam.hz - cl.el * cam.f;
+    const s = z * (.7 + .25 * cl.layer);
+    cl.rows.forEach(([ox, len], k) => {
+      const l = len * s * (.75 + .25 * (.5 + .5 * osc(t, 6, cl.x0 + k * .2)));
+      const X = x + ox * s, Y = y + k * cl.th * 1.55 * s, th = cl.th * s;
+      c.fillStyle = rgba(C.lav, .55); c.beginPath(); c.roundRect(X + 4, Y + th * .35, l, th, th / 2); c.fill();
+      c.fillStyle = C.white; c.beginPath(); c.roundRect(X, Y, l, th, th / 2); c.fill();
+    });
+  }
+}
+function drawBirds(c, t, cam) {
+  const z = cam.f / 1000;
+  for (const [o, el, sz, dx] of [[.1, .55, 16, 0], [.1, .6, 11, -40], [.62, .75, 12, 0]]) {
+    const x = -EXT - 100 + cyc(t, 1, o) * (2 * EXT + 200) + dx, y = cam.hz - el * cam.f + 18 * osc(t, 3, o);
+    const a = .2 + .5 * (.5 + .5 * osc(t, 24, o)), s = sz * z;
+    c.strokeStyle = C.white; c.lineWidth = Math.max(2, s * .16); c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(x - s, y - s * a); c.lineTo(x, y); c.lineTo(x + s, y - s * a); c.stroke();
+  }
+}
+function drawSeaSurface(c, t, cam, h0) {
+  if (want('sea')) drawSeaBody(c, t, cam, h0);
+  if (want('glitter')) drawGlitter(c, t, cam, h0);
+}
+function drawSeaBody(c, t, cam, h0) {
+  const g = c.createLinearGradient(0, cam.hz, 0, cam.hz + 900);
+  g.addColorStop(0, C.seaFar); g.addColorStop(.18, C.seaMid); g.addColorStop(.5, C.seaNear); g.addColorStop(1, C.seaPale);
+  c.fillStyle = g; c.fillRect(-EXT - 40, cam.hz, 2 * EXT + 80, 2600);
+  drawDots(c, t, cam, h0, ROW_COLS_ABOVE);
+  // haze and the horizon line
+  const hg = c.createLinearGradient(0, cam.hz - 60, 0, cam.hz + 40);
+  hg.addColorStop(0, 'rgba(238,250,255,0)'); hg.addColorStop(.6, 'rgba(238,250,255,0.9)'); hg.addColorStop(1, 'rgba(238,250,255,0)');
+  c.fillStyle = hg; c.fillRect(-EXT - 40, cam.hz - 60, 2 * EXT + 80, 100);
+  c.fillStyle = C.white; c.fillRect(-EXT - 40, cam.hz - 1, 2 * EXT + 80, 2);
+}
+function drawAbove(c, t, cam) {
+  if (want('sky')) drawSky(c, t, cam);
+  if (want('clouds')) drawClouds(c, t, cam);
+  if (want('birds')) drawBirds(c, t, cam);
+  drawSeaSurface(c, t, cam, Math.max(cam.h, 22));
+}
+
+/* ------------------------------------------------------------------ *
+ *  Under water: the surface seen from below, light shafts, bubbles
+ *  streaming past as the camera moves, and a small lavender school.
+ * ------------------------------------------------------------------ */
+const BUBBLES = Array.from({ length: 70 }, (_, i) => ({ x: (hash(i * 3.3) - .5) * 2 * EXT, y0: hash(i * 7.9), r: 3 + 12 * Math.pow(hash(i * 1.1), 2), n: 2 + (i % 3) }));
+const FISH = Array.from({ length: 26 }, (_, i) => ({ o: hash(i * 2.3), r: 40 + 120 * hash(i * 5.7), lav: i % 3 !== 0 }));
+function drawUnder(c, t, cam) {
+  if (want('under')) drawUnderBody(c, t, cam);
+  if (want('under-life')) drawUnderLife(c, t, cam);
+}
+function drawUnderBody(c, t, cam) {
+  const h0 = Math.min(cam.h, -22);
+  const top = c.createLinearGradient(0, cam.hz - 1400, 0, cam.hz);
+  top.addColorStop(0, C.uwTop); top.addColorStop(.7, '#8FE3F4'); top.addColorStop(1, C.uwSurf);
+  c.fillStyle = top; c.fillRect(-EXT - 40, cam.hz - 2600, 2 * EXT + 80, 2600);
+  const deep = c.createLinearGradient(0, cam.hz, 0, cam.hz + 1300);
+  deep.addColorStop(0, C.uwSurf); deep.addColorStop(.45, C.uwMid); deep.addColorStop(1, C.uwDeep);
+  c.fillStyle = deep; c.fillRect(-EXT - 40, cam.hz, 2 * EXT + 80, 2600);
+  // the sun seen through the surface (Snell's window)
+  const sx = SUN_AZ * cam.f, sy = cam.hz - .9 * cam.f;
+  const win = c.createRadialGradient(sx, sy, 20, sx, sy, 700);
+  win.addColorStop(0, 'rgba(255,255,255,0.95)'); win.addColorStop(.35, 'rgba(255,255,255,0.35)'); win.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = win; c.fillRect(sx - 700, sy - 700, 1400, 1400);
+  drawDots(c, t, cam, h0, ROW_COLS_UNDER);
+  drawGlitter(c, t, cam, h0);
+  // light shafts slanting down from the sun's direction
+  for (let k = 0; k < 7; k++) {
+    const x = (hash(k * 4.1) - .5) * 2200 + 140 * osc(t, 2, k * .13), w = 40 + 140 * hash(k * 8.3);
+    const a = .1 + .12 * (.5 + .5 * osc(t, 3, k * .21));
+    const g = c.createLinearGradient(0, cam.hz - 200, 0, cam.hz + 1100);
+    g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(x, cam.hz - 200); c.lineTo(x + w, cam.hz - 200); c.lineTo(x + w * 1.8 - 420, cam.hz + 1100); c.lineTo(x - 420, cam.hz + 1100); c.closePath(); c.fill();
+  }
+}
+function drawUnderLife(c, t, cam) {
+  drawRibbons(c, t, CURRENTS, .55);
+  // school of fish on a figure-of-eight
+  const fx = 560 * osc(t, 2), fy = cam.hz + 330 + 140 * osc(t, 4, .25);
+  const dir = Math.cos(TAU * 2 * t / L) >= 0 ? 1 : -1;
+  for (const f of FISH) {
+    const a = TAU * (f.o + cyc(t, 3)), x = fx + Math.cos(a) * f.r, y = fy + Math.sin(a) * f.r * .4;
+    c.fillStyle = f.lav ? C.lav : C.white;
+    c.beginPath(); c.moveTo(x + 13 * dir, y); c.lineTo(x - 9 * dir, y - 6); c.lineTo(x - 9 * dir, y + 6); c.closePath(); c.fill();
+  }
+  // bubbles: rise on their own, and stream past when the camera climbs or dives
+  const span = 2 * EXT + 200;
+  c.strokeStyle = 'rgba(255,255,255,0.9)'; c.fillStyle = C.white; c.lineWidth = 2;
+  for (const b of BUBBLES) {
+    const y = -EXT - 100 + frac(b.y0 - b.n * t / L + cam.h * .9 / span) * span;
+    const x = b.x + 12 * osc(t, 6, b.y0);
+    c.beginPath(); c.arc(x, y, b.r, 0, TAU); c.stroke();
+    c.beginPath(); c.arc(x - b.r * .35, y - b.r * .35, Math.max(1, b.r * .22), 0, TAU); c.fill();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  The waterline: when the camera is near the surface the frame splits
+ *  along a wavy meniscus that sweeps across as it dives or breaches.
+ * ------------------------------------------------------------------ */
+const KW = 5.5;
+const wlY = (x, t, cam) => cam.hz + cam.h * KW + 22 * Math.sin(x * .005 + TAU * 3 * t / L) + 10 * Math.sin(x * .013 - TAU * 5 * t / L);
+function waterlinePath(t, cam, below) {
+  const p = new Path2D();
+  p.moveTo(-EXT - 40, below ? EXT + 400 : -EXT - 400);
+  for (let x = -EXT - 40; x <= EXT + 40; x += 24) p.lineTo(x, wlY(x, t, cam));
+  p.lineTo(EXT + 40, below ? EXT + 400 : -EXT - 400);
+  p.closePath();
+  return p;
+}
+function drawWaterline(c, t, cam) {
+  c.lineJoin = 'round';
+  c.strokeStyle = rgba(C.white, .5); c.lineWidth = 16;
+  c.beginPath(); for (let x = -EXT - 40; x <= EXT + 40; x += 24) { const y = wlY(x, t, cam) + 10; if (x === -EXT - 40) c.moveTo(x, y); else c.lineTo(x, y); } c.stroke();
+  c.strokeStyle = C.white; c.lineWidth = 5;
+  c.beginPath(); for (let x = -EXT - 40; x <= EXT + 40; x += 24) { const y = wlY(x, t, cam); if (x === -EXT - 40) c.moveTo(x, y); else c.lineTo(x, y); } c.stroke();
+  c.fillStyle = C.white;
+  for (let k = 0; k < 60; k++) {
+    const x = -EXT + frac(hash(k * 2.7) + cyc(t, 2)) * 2 * EXT, y = wlY(x, t, cam) + 8 + 30 * hash(k * 5.1);
+    c.beginPath(); c.arc(x, y, 2 + 5 * hash(k * 9.3), 0, TAU); c.fill();
+  }
+}
+// droplets thrown up when the camera dives and when it breaks back out
+function drawSplash(c, t, cam) {
+  for (const cr of CROSS) {
+    const age = wrapT(t - cr.t); if (age > 1.4) continue;
+    c.fillStyle = C.white;
+    for (let k = 0; k < 46; k++) {
+      const a = -Math.PI / 2 + (hash(k * 3.3 + cr.t) - .5) * 2.6, v = 500 + 900 * hash(k * 7.1 + cr.t);
+      const x0 = (hash(k * 1.9 + cr.t) - .5) * 1400;
+      const x = x0 + Math.cos(a) * v * age, y = cam.hz + 40 + Math.sin(a) * v * age + 1300 * age * age;
+      c.globalAlpha = clamp(1 - age / 1.4); c.beginPath(); c.arc(x, y, 3 + 8 * hash(k + cr.t), 0, TAU); c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Wind: sheer ribbons that flutter and twist as they cross the frame,
+ *  blown particles, and radial speed lines when the camera races.
+ * ------------------------------------------------------------------ */
+const RIBBONS = [
+  { t: 0.10, dur: 2.6, y: -170, ang: -.30, len: 2700, w: 120, lav: false },
+  { t: 1.30, dur: 2.3, y: 190, ang: -.22, len: 2500, w: 70, lav: true },
+  { t: 2.85, dur: 2.1, y: -330, ang: -.38, len: 2800, w: 140, lav: false },
+  { t: 4.40, dur: 1.9, y: 60, ang: -.26, len: 2600, w: 60, lav: true },
+  { t: 5.60, dur: 1.8, y: -120, ang: -.2, len: 2600, w: 100, lav: false },
+  { t: 11.9, dur: 2.4, y: 40, ang: -.34, len: 2800, w: 130, lav: false },
+  { t: 13.1, dur: 2.5, y: -250, ang: -.24, len: 2600, w: 90, lav: true }
+];
+const CURRENTS = [
+  { t: 7.9, dur: 2.8, y: 260, ang: -.12, len: 2600, w: 90, lav: true },
+  { t: 9.2, dur: 2.6, y: 520, ang: -.18, len: 2600, w: 60, lav: false }
+];
+function drawRibbons(c, t, list = RIBBONS, alpha = 1) {
+  for (const rb of list) {
+    const lt = wrapT(t - rb.t); if (lt > rb.dur) continue;
+    const head = inOutCubic(prog(0, rb.dur * .72, lt)), tail = inOutCubic(prog(rb.dur * .28, rb.dur, lt));
+    if (head <= tail) continue;
+    const ca = Math.cos(rb.ang), sa = Math.sin(rb.ang), N = 70;
+    const at = u => {
+      const flutter = 46 * Math.sin(TAU * (1.3 * u) - 7 * lt) + 18 * Math.sin(TAU * 3.1 * u - 11 * lt);
+      const d = -1400 + u * rb.len;
+      return [d * ca - flutter * sa, rb.y + d * sa + flutter * ca];
+    };
+    let prev = null;
+    const lineA = [], lineB = [];
+    for (let i = 0; i <= N; i++) {
+      const u = lerp(tail, head, i / N);
+      const [x, y] = at(u), [x2, y2] = at(u + .002);
+      const tx = x2 - x, ty = y2 - y, tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl;
+      const env = Math.pow(Math.sin(Math.PI * i / N), .6);
+      const twist = Math.cos(TAU * 1.1 * u - 5 * lt);       // the fabric turning over
+      const w = rb.w * env * twist;
+      const cur = [x + nx * w / 2, y + ny * w / 2, x - nx * w / 2, y - ny * w / 2, twist];
+      const off = rb.w * .75 + 16;
+      if (i / N > .08) lineA.push([x + nx * off, y + ny * off]);
+      if (i / N > .16) lineB.push([x - nx * (off + 12), y - ny * (off + 12)]);
+      if (prev) {
+        const front = (prev[4] + twist) / 2 >= 0;
+        const col = front ? (rb.lav ? C.lav : C.white) : (rb.lav ? C.white : C.lav);
+        c.fillStyle = rgba(col, ((front ? .72 : .42) * env + .06) * alpha);
+        c.beginPath(); c.moveTo(prev[0], prev[1]); c.lineTo(cur[0], cur[1]); c.lineTo(cur[2], cur[3]); c.lineTo(prev[2], prev[3]); c.closePath(); c.fill();
+        c.strokeStyle = `rgba(255,255,255,${.9 * env * alpha})`; c.lineWidth = 1.8;
+        c.beginPath(); c.moveTo(prev[0], prev[1]); c.lineTo(cur[0], cur[1]); c.stroke();
+      }
+      prev = cur;
+    }
+    // two thin wind lines riding alongside the ribbon
+    c.strokeStyle = `rgba(255,255,255,${.8 * alpha})`; c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const [pts, lw] of [[lineA, 2.2], [lineB, 1.4]]) {
+      if (pts.length < 2) continue;
+      c.lineWidth = lw; c.beginPath(); pts.forEach(([px, py], k) => k ? c.lineTo(px, py) : c.moveTo(px, py)); c.stroke();
+    }
+  }
+}
+const MOTES = Array.from({ length: 110 }, (_, i) => ({ x0: hash(i * 1.3), y0: hash(i * 4.7), n: 2 + (i % 4), s: 2 + 4 * hash(i * 8.1), lav: i % 5 === 0, dia: i % 3 === 0 }));
+function drawMotes(c, t) {
+  const span = 2 * EXT + 400;
+  for (const m of MOTES) {
+    const p = cyc(t, m.n, m.x0);
+    const x = -EXT - 200 + p * span, y = -EXT + m.y0 * 2 * EXT - p * span * .32 + 40 * osc(t, 5, m.y0);
+    c.fillStyle = m.lav ? C.lav : C.white; c.globalAlpha = .85;
+    if (m.dia) { c.save(); c.translate(x, y); c.rotate(Math.PI / 4 + TAU * cyc(t, 3, m.x0)); c.fillRect(-m.s, -m.s, 2 * m.s, 2 * m.s); c.restore(); }
+    else { c.beginPath(); c.arc(x, y, m.s, 0, TAU); c.fill(); }
+  }
+  c.globalAlpha = 1;
+}
+function drawSpeedLines(c, t, cam) {
+  const k = clamp((cam.v - 720) / 260); if (k <= 0) return;
+  c.strokeStyle = `rgba(255,255,255,${.55 * k})`; c.lineCap = 'round';
+  for (let i = 0; i < 48; i++) {
+    const a = TAU * hash(i * 2.1), r0 = 120 + 1400 * cyc(t, 6 + (i % 4), hash(i * 6.3));
+    const len = (60 + 260 * hash(i * 9.7)) * (r0 / 900);
+    c.lineWidth = 1 + 2.5 * hash(i * 3.9) * (r0 / 1200);
+    c.beginPath(); c.moveTo(Math.cos(a) * r0, cam.hz + Math.sin(a) * r0 * .55); c.lineTo(Math.cos(a) * (r0 + len), cam.hz + Math.sin(a) * (r0 + len) * .55); c.stroke();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  HUD (optional, ?hud) — carried over from the reel, with an altitude gauge
+ * ------------------------------------------------------------------ */
+const pad2 = n => String(n).padStart(2, '0');
+function drawHUD(c, t, fi) {
+  const cam = camera(t);
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = C.white; c.strokeStyle = C.white; c.lineWidth = 2; c.globalAlpha = .92;
+  c.shadowColor = 'rgba(16,72,140,0.35)'; c.shadowBlur = 6;   // keeps white text readable over white clouds
+  const m = 40, l = 22;
+  c.beginPath();
+  c.moveTo(m, m + l); c.lineTo(m, m); c.lineTo(m + l, m);
+  c.moveTo(W - m - l, m); c.lineTo(W - m, m); c.lineTo(W - m, m + l);
+  c.moveTo(m, H - m - l); c.lineTo(m, H - m); c.lineTo(m + l, H - m);
+  c.moveTo(W - m - l, H - m); c.lineTo(W - m, H - m); c.lineTo(W - m, H - m - l);
+  c.stroke();
+  setFont(c, F.mono(13), 2.4); c.textBaseline = 'middle';
+  c.textAlign = 'left'; c.fillText('CLEAR HORIZON — SEAMLESS LOOP', m + 40, m);
+  c.textAlign = 'right'; c.fillText(`TC 00:00:${pad2(Math.floor(fi / FPS))}:${pad2(fi % FPS)}`, W - m - 40, m);
+  c.textAlign = 'left'; c.fillText('SC.08 — SEA / SKY / WIND', m + 40, H - m);
+  const tw = wrapT(t), bar = Math.floor(tw / BAR), beat = Math.floor(tw / BEAT) % 4;
+  c.textAlign = 'right'; c.fillText(`BAR ${bar + 1} · BEAT ${beat + 1}`, W - m - 40 - 4 * 16 - 10, H - m);
+  for (let k = 0; k < 4; k++) {
+    const x = W - m - 40 - (3 - k) * 16 - 9;
+    if (k === beat) c.fillRect(x, H - m - 5, 10, 10); else c.strokeRect(x + 1, H - m - 4, 8, 8);
+  }
+  c.globalAlpha = .6; c.setLineDash([2, 14]); c.lineDashOffset = -16 * cyc(t, 12);
+  c.beginPath(); c.moveTo(m + 40, H - m + 18); c.lineTo(W - m - 40, H - m + 18); c.stroke(); c.setLineDash([]);
+  // readouts + altitude gauge
+  c.globalAlpha = .8; setFont(c, F.mono(12), 2.2); c.textAlign = 'left';
+  c.fillText('96 BPM · 6 BARS · ROLL ±12° · 15 s LOOP', m + 40, 96);
+  const alt = cam.h / 100, deg = cam.roll / d2r;
+  c.fillText(`${alt >= 0 ? 'ALT +' : 'DEPTH '}${Math.abs(alt).toFixed(2)} m   SPD ${(cam.v / 100).toFixed(1)} m/s   ROLL ${deg >= 0 ? '+' : ''}${deg.toFixed(1)}°`, m + 40, 124);
+  const gx = W - m - 18, g0 = 180, g1 = H - 180, yOf = h => lerp(g0, g1, (400 - h) / 740);
+  c.globalAlpha = .55; c.fillRect(gx, g0, 2, g1 - g0);
+  for (let h = 400; h >= -340; h -= 20) c.fillRect(gx - (h % 100 === 0 ? 12 : 6), yOf(h), h % 100 === 0 ? 12 : 6, 1.5);
+  c.globalAlpha = .9; c.fillRect(gx - 22, yOf(0) - 1, 24, 3);
+  c.textAlign = 'right'; setFont(c, F.mono(11), 2); c.fillText('SEA 0', gx - 28, yOf(0));
+  const my = yOf(cam.h);
+  c.beginPath(); c.moveTo(gx - 6, my); c.lineTo(gx - 20, my - 8); c.lineTo(gx - 20, my + 8); c.closePath(); c.fill();
+  c.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Frame assembly
+ * ------------------------------------------------------------------ */
+function compose(c, t) {
+  // reset stroke state so every frame renders identically wherever rendering starts
+  c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  c.lineCap = 'butt'; c.lineJoin = 'miter'; c.lineWidth = 1; c.setLineDash([]); c.lineDashOffset = 0;
+  if (PASS) c.clearRect(0, 0, W, H);
+  if (want('sky')) { c.fillStyle = C.skyMid; c.fillRect(0, 0, W, H); }
+  const cam = camera(t);
+  c.save(); c.translate(W / 2, H / 2); c.rotate(cam.roll);
+  const wl = cam.hz + cam.h * KW;
+  const above = wl - 40 > -EXT, under = wl + 40 < EXT;
+  if (above) {
+    c.save(); if (under) c.clip(waterlinePath(t, cam, false));
+    drawAbove(c, t, cam);
+    if (want('speed')) drawSpeedLines(c, t, cam);
+    if (want('motes')) drawMotes(c, t);
+    if (want('wind')) drawRibbons(c, t);
+    c.restore();
+  }
+  if (under) {
+    c.save(); if (above) c.clip(waterlinePath(t, cam, true));
+    drawUnder(c, t, cam);
+    c.restore();
+  }
+  if (above && under && want('waterline')) drawWaterline(c, t, cam);
+  if (want('splash')) drawSplash(c, t, cam);
+  c.restore();
+}
+function renderFrame(fi, N = 6) {
+  const t0 = fi / FPS;
+  if (N <= 1) compose(mctx, t0);
+  else if (PASS) {
+    // a pass has transparency, so average the subframes additively instead of blending over
+    const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+    mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, W, H);
+    mctx.globalCompositeOperation = 'lighter'; mctx.globalAlpha = 1 / N;
+    for (let k = 0; k < N; k++) { compose(sc, t0 + ((k + .5) / N - .5) * shutter); mctx.drawImage(SUB, 0, 0); }
+    mctx.globalCompositeOperation = 'source-over'; mctx.globalAlpha = 1;
+  } else {
+    const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+    for (let k = 0; k < N; k++) {
+      compose(sc, t0 + ((k + .5) / N - .5) * shutter);
+      mctx.globalAlpha = 1 / (k + 1); mctx.drawImage(SUB, 0, 0);
+    }
+    mctx.globalAlpha = 1;
+  }
+  if (SHOW_HUD) drawHUD(mctx, t0, fi);
+}
+
+/* ------------------------------------------------------------------ *
+ *  SOUND — 96 BPM, D major, rendered over three loop cycles and cut
+ *  from the middle so every reverb and delay tail wraps seamlessly.
+ *  Underwater, the whole mix goes through a closing low-pass.
+ * ------------------------------------------------------------------ */
+async function renderAudio(only) {                     // only: 'drums' | 'bass' | 'music' | 'fx' renders one stem
+  const on = cat => !only || only === cat;
+  const SR = 48000, CYCLES = 3, LEN = SR * L * CYCLES;
+  const ac = new OfflineAudioContext({ numberOfChannels: 2, length: LEN, sampleRate: SR });
+  const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
+  const noise = ac.createBuffer(2, SR * L, SR);
+  { const r = rng(3); for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1; } }
+
+  const out = ac.createGain();
+  const water = ac.createBiquadFilter(); water.type = 'lowpass'; water.frequency.value = 19000; water.Q.value = .9;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = .006; comp.release.value = .2;
+  out.connect(water); water.connect(comp); comp.connect(ac.destination);
+  const dry = ac.createGain(); dry.connect(comp);                // splashes bypass the underwater filter
+
+  const ir = ac.createBuffer(2, SR * 3, SR);
+  { const r = rng(5); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * Math.pow(1 - i / d.length, 3.6); } }
+  const verb = ac.createConvolver(); verb.buffer = ir;
+  const verbOut = ac.createGain(); verbOut.gain.value = .45; verb.connect(verbOut); verbOut.connect(out);
+  const delay = ac.createDelay(2); delay.delayTime.value = BEAT * .75;
+  const fb = ac.createGain(); fb.gain.value = .33;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 3200;
+  delay.connect(dlp); dlp.connect(fb); fb.connect(delay);
+  const delOut = ac.createGain(); delOut.gain.value = .3; dlp.connect(delOut); delOut.connect(out); delOut.connect(verb);
+  const duck = ac.createGain(); duck.connect(out);
+
+  const filt = (type, f, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); };
+  const sendTo = (node, dest, amt) => { const g = ac.createGain(); g.gain.value = amt; node.connect(g); g.connect(dest); };
+  const panned = (node, p, dest = out) => { const pn = ac.createStereoPanner(); pn.pan.value = p; node.connect(pn); pn.connect(dest); return pn; };
+  const nsrc = () => { const s = ac.createBufferSource(); s.buffer = noise; s.loop = true; s.loopEnd = L; return s; };
+  const sat = (() => { const n = 1024, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; cv[i] = Math.tanh(2 * x) / Math.tanh(2); } return cv; })();
+
+  function kick(t, v) {
+    duck.gain.setValueAtTime(.35, t); duck.gain.linearRampToValueAtTime(1, t + .2);
+    if (!on('drums')) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(48, t + .1);
+    const sh = ac.createWaveShaper(); sh.curve = sat;
+    const g = ac.createGain(); env(g, t, .003, v, .34); o.connect(sh); sh.connect(g); g.connect(out); o.start(t); o.stop(t + .4);
+  }
+  function clap(t, v, off) {
+    if (!on('drums')) return;
+    const s = nsrc(), bp = filt('bandpass', 1500, .9), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t - .001);
+    for (let k = 0; k < 3; k++) { const tk = t + k * .01; g.gain.linearRampToValueAtTime(v, tk + .001); g.gain.exponentialRampToValueAtTime(v * .25, tk + .009); }
+    g.gain.linearRampToValueAtTime(v * .7, t + .032); g.gain.exponentialRampToValueAtTime(.0001, t + .2);
+    s.connect(bp); bp.connect(g); panned(g, .05); sendTo(g, verb, .35); s.start(t, off); s.stop(t + .25);
+  }
+  function hat(t, v, open, off) {
+    if (!on('drums')) return;
+    const s = nsrc(), hp = filt('highpass', open ? 6800 : 8500), g = ac.createGain(); env(g, t, .002, v, open ? .16 : .03);
+    s.connect(hp); hp.connect(g); panned(g, open ? -.25 : .28); s.start(t, off); s.stop(t + (open ? .22 : .05));
+  }
+  function bass(t, dur, n, v) {
+    if (!on('bass')) return;
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = NOTE(n);
+    const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.value = NOTE(n) / 2;
+    const lp = filt('lowpass', 300, 4); lp.frequency.setValueAtTime(260, t); lp.frequency.linearRampToValueAtTime(900, t + .02); lp.frequency.exponentialRampToValueAtTime(260, t + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + .006); g.gain.setValueAtTime(v, t + dur * .7); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const g2 = ac.createGain(); g2.gain.value = .9;
+    o.connect(lp); lp.connect(g); o2.connect(g2); g2.connect(g); g.connect(duck);
+    o.start(t); o2.start(t); o.stop(t + dur + .03); o2.stop(t + dur + .03);
+  }
+  function pad(t0, t1, notes, v) {
+    if (!on('music')) return;
+    const lp = filt('lowpass', 2200), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t0); g.gain.linearRampToValueAtTime(v, t0 + .35);
+    g.gain.setValueAtTime(v, t1); g.gain.linearRampToValueAtTime(.0001, t1 + .9);
+    lp.connect(g); g.connect(duck); sendTo(g, verb, .55);
+    for (const n of notes) for (const [type, det] of [['sawtooth', -8], ['triangle', 8]]) {
+      const o = ac.createOscillator(); o.type = type; o.frequency.value = NOTE(n); o.detune.value = det;
+      const pg = ac.createGain(); pg.gain.value = (type === 'sawtooth' ? .5 : 1) / notes.length; o.connect(pg); pg.connect(lp);
+      o.start(t0); o.stop(t1 + 1);
+    }
+  }
+  function bell(t, n, v, p) {
+    if (!on('music')) return;
+    const f = NOTE(n), g = ac.createGain(); env(g, t, .003, v, .7);
+    for (const [ratio, amp, dec] of [[1, 1, .7], [2, .3, .35], [3.01, .1, .18]]) {
+      const o = ac.createOscillator(); o.frequency.value = f * ratio;
+      const og = ac.createGain(); env(og, t, .002, amp, dec); o.connect(og); og.connect(g); o.start(t); o.stop(t + dec + .05);
+    }
+    panned(g, p); sendTo(g, verb, .35); sendTo(g, delay, .45);
+  }
+  function whoosh(t, dur, v, p0, p1, off) {
+    if (!on('fx')) return;
+    const s = nsrc(), bp = filt('bandpass', 400, 1.1);
+    bp.frequency.setValueAtTime(350, t); bp.frequency.exponentialRampToValueAtTime(2600, t + dur * .6); bp.frequency.exponentialRampToValueAtTime(900, t + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur * .55); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const pn = ac.createStereoPanner(); pn.pan.setValueAtTime(p0, t); pn.pan.linearRampToValueAtTime(p1, t + dur);
+    s.connect(bp); bp.connect(g); g.connect(pn); pn.connect(out); sendTo(g, verb, .2); s.start(t, off); s.stop(t + dur + .02);
+  }
+  function splash(t, v, off) {
+    if (!on('fx')) return;
+    const s = nsrc(), bp = filt('bandpass', 1300, .5), g = ac.createGain(); env(g, t, .004, v, .7);
+    s.connect(bp); bp.connect(g); panned(g, 0, dry); sendTo(g, verb, .3); s.start(t, off); s.stop(t + .8);
+    const s2 = nsrc(), hp = filt('highpass', 3000), g2 = ac.createGain(); env(g2, t + .05, .01, v * .5, 1.1);
+    s2.connect(hp); hp.connect(g2); panned(g2, 0, dry); s2.start(t, off + 3); s2.stop(t + 1.3);
+    for (let k = 0; k < 8; k++) {
+      const tk = t + .08 + k * .06 + hash(k + off) * .03, o = ac.createOscillator();
+      o.frequency.setValueAtTime(1600 + 1800 * hash(k * 3 + off), tk); o.frequency.exponentialRampToValueAtTime(800, tk + .05);
+      const og = ac.createGain(); env(og, tk, .002, .04, .05); o.connect(og); panned(og, hash(k + off) - .5, dry); o.start(tk); o.stop(tk + .08);
+    }
+  }
+  function bloop(t) {
+    if (!on('fx')) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(140, t + .35);
+    const g = ac.createGain(); env(g, t, .004, .18, .4); o.connect(g); g.connect(dry); sendTo(g, verb, .5); o.start(t); o.stop(t + .45);
+  }
+
+  // continuous air rush that follows the camera's speed, and a low sea bed
+  const air = nsrc(), airBp = filt('bandpass', 900, .6), airG = ac.createGain(); airG.gain.value = .0001;
+  air.connect(airBp); airBp.connect(airG); airG.connect(out); if (on('fx')) air.start(0, 1.7);
+  const bed = nsrc(), bedLp = filt('lowpass', 300), bedG = ac.createGain(); bedG.gain.value = .05;
+  bed.connect(bedLp); bedLp.connect(bedG); bedG.connect(out); if (on('fx')) bed.start(0, 6.1);
+
+  const CH = [[50, 57, 61, 64, 66], [54, 57, 61, 64, 69], [47, 54, 57, 61, 62], [55, 57, 59, 62, 66], [52, 55, 59, 62, 66], [57, 59, 61, 64, 66]];
+  const ROOTS = [38, 42, 35, 43, 40, 45];
+  const ARP = [0, 2, 4, 3, 1, 3, 4, 2, 0, 3, 4, 2, 1, 4, 3, 2];     // chord-tone indices, 16ths
+
+  for (let cy = 0; cy < CYCLES; cy++) {
+    const o = cy * L, r = rng(21);
+    for (let bar = 0; bar < 6; bar++) {
+      const tb = o + bar * BAR, ch = CH[bar], top = ch.map(n => n + 12);
+      pad(tb, tb + BAR, ch, .042);
+      // bass: root on 1, a push on the "and" of 2, the fifth on 3, an octave pickup on the "and" of 4
+      bass(tb, BEAT * .9, ROOTS[bar], .3);
+      bass(tb + BEAT * 1.5, BEAT * .45, ROOTS[bar], .22);
+      bass(tb + BEAT * 2, BEAT * .9, ROOTS[bar] + 7, .24);
+      bass(tb + BEAT * 3.5, BEAT * .45, ROOTS[bar] + 12, .18);
+      for (let s = 0; s < 16; s++) {
+        const t = tb + s * BEAT / 4;
+        bell(t, top[ARP[s]] + (s >= 8 && s % 4 === 0 ? 12 : 0), (s % 4 === 0 ? .08 : .05) * (.85 + .3 * r()), s % 2 ? .4 : -.4);
+        hat(t, s % 4 === 2 ? .06 : (s % 2 ? .025 : .04), s % 4 === 2, r() * 10);
+      }
+      for (const b of [0, 1.75, 2]) kick(tb + b * BEAT, b === 1.75 ? .5 : .82);
+      clap(tb + BEAT, .36, r() * 10); clap(tb + 3 * BEAT, .36, r() * 10);
+    }
+    // air rush: follows the speed spline, sampled every half bar
+    for (let k = 0; k <= 12; k++) {
+      const t = k * L / 12, sp = clamp((camV(t) - 420) / 580);
+      airG.gain.linearRampToValueAtTime(.01 + .09 * sp * (camH(t) > 0 ? 1 : .2), o + t);
+      airBp.frequency.linearRampToValueAtTime(600 + 1400 * sp, o + t);
+    }
+    // wind ribbons get a whoosh each, travelling left to right
+    RIBBONS.forEach((rb, i) => whoosh(o + rb.t, rb.dur, rb.lav ? .07 : .11, -.8, .8, 1.3 + i));
+    // dive: bloop, splash, the mix sinks under a low-pass; breach: it climbs back and opens up
+    splash(o + DIVE, .15, 2.2); bloop(o + DIVE + .08);
+    water.frequency.exponentialRampToValueAtTime(19000, o + DIVE - .05);
+    water.frequency.exponentialRampToValueAtTime(700, o + DIVE + .4);
+    water.frequency.exponentialRampToValueAtTime(900, o + BREACH - .7);
+    water.frequency.exponentialRampToValueAtTime(2200, o + BREACH - .04);
+    water.frequency.exponentialRampToValueAtTime(19000, o + BREACH + .12);
+    splash(o + BREACH, .17, 7.4);
+  }
+
+  const full = await ac.startRendering();
+  const buf = new AudioBuffer({ numberOfChannels: 2, length: SR * L, sampleRate: SR });
+  for (let ch = 0; ch < 2; ch++) buf.copyToChannel(full.getChannelData(ch).subarray(SR * L, SR * L * 2), ch);
+  return buf;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Boot + render hooks
+ * ------------------------------------------------------------------ */
+const ready = (async () => {
+  const probes = [[F.mono(20), 'A']];
+  await Promise.all(probes.map(([f, s]) => document.fonts.load(f, s)));
+  await document.fonts.ready;
+  return { missing: probes.filter(([f, s]) => !document.fonts.check(f, s)).map(([f]) => f) };
+})();
+window.__ready = ready;
+window.__frame = async (fi, n) => { PASS = null; renderFrame(fi, n ?? 6); return main.toDataURL('image/png'); };
+window.__passes = () => PASSES;
+window.__events = () => ({ dive: DIVE, breach: BREACH, bar: BAR });
+window.__framePasses = async (fi, n) => {
+  const out = [];
+  for (const p of PASSES) { PASS = p; renderFrame(fi, n ?? 6); out.push(main.toDataURL('image/png')); }
+  PASS = null;
+  return out;
+};
+window.__audio = async (stem, gain) => {           // stems reuse the mix's gain so their levels match it
+  const buf = await renderAudio(stem);
+  const a = buf.getChannelData(0), b = buf.getChannelData(1), n = a.length;
+  let peak = 0, sum = 0;
+  for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i]), Math.abs(b[i])); sum += a[i] * a[i] + b[i] * b[i]; }
+  const g = gain ?? (peak > 0 ? .84 / peak : 1);        // about -16 LUFS
+  const pcm = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { pcm[2 * i] = clamp(a[i] * g, -1, 1) * 32767; pcm[2 * i + 1] = clamp(b[i] * g, -1, 1) * 32767; }
+  const bytes = new Uint8Array(pcm.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)), gain: g };
+};
+if (RENDER) return;
+
+/* ------------------------------------------------------------------ *
+ *  Live player
+ * ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const pp = $('pp'), big = $('big'), scrub = $('scrub'), tcEl = $('tc');
+let playing = false, t = 0, actx = null, srcNode = null, audioBuf = null, clock0 = 0, raf = 0;
+const audioReady = renderAudio().then(b => { audioBuf = b; }).catch(() => { audioBuf = null; });
+function draw() {
+  const fi = Math.floor(wrapT(t) * FPS) % FRAMES;
+  renderFrame(fi, 1);
+  scrub.value = fi;
+  tcEl.textContent = `${(fi / FPS).toFixed(2).padStart(5, '0')} s · bar ${Math.floor(fi / FPS / BAR) + 1}`;
+}
+const now = () => (actx && srcNode) ? actx.currentTime : performance.now() / 1000;
+function tick() { t = now() - clock0; draw(); raf = requestAnimationFrame(tick); }
+async function play() {
+  if (playing) return;
+  playing = true; big.hidden = true; pp.textContent = 'Pause';
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); await audioReady; } catch (e) { /* silent playback */ }
+  if (!playing) return;
+  const off = wrapT(t);
+  if (actx && audioBuf) {
+    srcNode = actx.createBufferSource(); srcNode.buffer = audioBuf; srcNode.loop = true; srcNode.connect(actx.destination);
+    srcNode.start(0, off); clock0 = actx.currentTime - off;
+  } else { srcNode = null; clock0 = performance.now() / 1000 - off; }
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+}
+function stop() {
+  playing = false; pp.textContent = 'Play'; big.hidden = false; cancelAnimationFrame(raf);
+  if (srcNode) { try { srcNode.stop(); } catch (e) {} srcNode.disconnect(); srcNode = null; }
+}
+pp.addEventListener('click', () => playing ? stop() : play());
+big.addEventListener('click', play);
+scrub.addEventListener('input', () => { stop(); t = +scrub.value / FPS; draw(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playing ? stop() : play(); } });
+ready.then(draw);
+})();
+</script>

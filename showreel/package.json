@@ -1,0 +1,13 @@
+{
+  "name": "claude-showreel",
+  "private": true,
+  "type": "module",
+  "description": "A 15-second motion design showreel rendered from canvas code.",
+  "scripts": {
+    "render": "node render.mjs",
+    "stills": "node render.mjs --stills 30,90,150,240,330,420,480,560,640,720,780,880"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

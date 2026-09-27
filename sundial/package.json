@@ -1,0 +1,13 @@
+{
+  "name": "sundial",
+  "private": true,
+  "type": "module",
+  "description": "A 30-second seamless loop of one day in a seaside room, rendered from canvas code.",
+  "scripts": {
+    "render": "node render.mjs",
+    "stills": "node render.mjs --stills 0,240,480,720,960,1200,1440,1680"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
