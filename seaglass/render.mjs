@@ -4,6 +4,8 @@
 //   node render.mjs                       full render → out/seaglass.mp4
 //   node render.mjs --stills 120,300,480  render a few frames → out/stills/*.png + contact sheet
 //   node render.mjs --workers 4 --crf 17
+//   node render.mjs --ae-audio            soundtrack + stems for After Effects → ae/audio/*.wav
+//   node render.mjs --prores              also write a ProRes 422 HQ master → out/seaglass-prores.mov
 //
 // Needs Playwright's Chromium and an ffmpeg build with libx264 (set FFMPEG=/path/to/ffmpeg).
 
@@ -88,6 +90,21 @@ async function main() {
     return;
   }
 
+  if (args['ae-audio']) {
+    // the mix, then each stem at the mix's gain so they line up with it in the timeline
+    const dir = path.join(ROOT, 'ae', 'audio'); fs.mkdirSync(path.join(dir, 'stems'), { recursive: true });
+    const browser = await launch(); const page = await openPage(browser, port);
+    const mix = await page.evaluate(() => window.__audio());
+    writeWav(path.join(dir, 'seaglass.wav'), mix.b64, mix.rate);
+    for (const stem of ['drums', 'bass', 'music', 'fx']) {
+      const a = await page.evaluate(([s, g]) => window.__audio(s, g), [stem, mix.gain]);
+      writeWav(path.join(dir, 'stems', `seaglass-${stem}.wav`), a.b64, a.rate);
+    }
+    await browser.close(); srv.close();
+    console.log('audio →', dir);
+    return;
+  }
+
   const framesDir = path.join(OUT, 'frames'); fs.mkdirSync(framesDir, { recursive: true });
   const t0 = Date.now();
   const first = +(args.from || 0), last = +(args.to || FRAMES - 1);
@@ -122,6 +139,16 @@ async function main() {
     '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
     '-c:a', 'aac', '-b:a', '320k', '-shortest', '-movflags', '+faststart', mp4]);
   console.log('video →', mp4);
+  if (args.prores) {
+    const mov = path.join(OUT, 'seaglass-prores.mov');
+    await run(FFMPEG, ['-y', '-loglevel', 'error', '-stats',
+      '-framerate', String(FPS), '-i', path.join(framesDir, 'f_%04d.png'), '-i', path.join(OUT, 'audio.wav'),
+      '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv422p10le',
+      '-c:v', 'prores_ks', '-profile:v', '3', '-vendor', 'apl0',
+      '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+      '-c:a', 'pcm_s16le', '-shortest', mov]);
+    console.log('ProRes master →', mov);
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

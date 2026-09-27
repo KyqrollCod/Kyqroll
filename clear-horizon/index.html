@@ -60,6 +60,11 @@ body.render .screen{width:1920px;height:1080px}
 const Q = new URLSearchParams(location.search);
 const RENDER = Q.has('render');
 const SHOW_HUD = Q.has('hud');                 // the clean loop has no overlay; ?hud brings the reel's HUD back
+// Layer passes for compositing (After Effects): draw one element group on transparency.
+// Listed bottom to top; stacked in this order they rebuild the frame.
+const PASSES = ['sky', 'clouds', 'birds', 'sea', 'glitter', 'speed', 'motes', 'wind', 'under', 'under-life', 'waterline', 'splash'];
+let PASS = null;
+const want = p => !PASS || PASS === p;
 if (RENDER) document.body.classList.add('render');
 
 const W = 1920, H = 1080, FPS = 60, L = 15, FRAMES = L * FPS;
@@ -308,6 +313,10 @@ function drawBirds(c, t, cam) {
   }
 }
 function drawSeaSurface(c, t, cam, h0) {
+  if (want('sea')) drawSeaBody(c, t, cam, h0);
+  if (want('glitter')) drawGlitter(c, t, cam, h0);
+}
+function drawSeaBody(c, t, cam, h0) {
   const g = c.createLinearGradient(0, cam.hz, 0, cam.hz + 900);
   g.addColorStop(0, C.seaFar); g.addColorStop(.18, C.seaMid); g.addColorStop(.5, C.seaNear); g.addColorStop(1, C.seaPale);
   c.fillStyle = g; c.fillRect(-EXT - 40, cam.hz, 2 * EXT + 80, 2600);
@@ -317,12 +326,11 @@ function drawSeaSurface(c, t, cam, h0) {
   hg.addColorStop(0, 'rgba(238,250,255,0)'); hg.addColorStop(.6, 'rgba(238,250,255,0.9)'); hg.addColorStop(1, 'rgba(238,250,255,0)');
   c.fillStyle = hg; c.fillRect(-EXT - 40, cam.hz - 60, 2 * EXT + 80, 100);
   c.fillStyle = C.white; c.fillRect(-EXT - 40, cam.hz - 1, 2 * EXT + 80, 2);
-  drawGlitter(c, t, cam, h0);
 }
 function drawAbove(c, t, cam) {
-  drawSky(c, t, cam);
-  drawClouds(c, t, cam);
-  drawBirds(c, t, cam);
+  if (want('sky')) drawSky(c, t, cam);
+  if (want('clouds')) drawClouds(c, t, cam);
+  if (want('birds')) drawBirds(c, t, cam);
   drawSeaSurface(c, t, cam, Math.max(cam.h, 22));
 }
 
@@ -333,6 +341,10 @@ function drawAbove(c, t, cam) {
 const BUBBLES = Array.from({ length: 70 }, (_, i) => ({ x: (hash(i * 3.3) - .5) * 2 * EXT, y0: hash(i * 7.9), r: 3 + 12 * Math.pow(hash(i * 1.1), 2), n: 2 + (i % 3) }));
 const FISH = Array.from({ length: 26 }, (_, i) => ({ o: hash(i * 2.3), r: 40 + 120 * hash(i * 5.7), lav: i % 3 !== 0 }));
 function drawUnder(c, t, cam) {
+  if (want('under')) drawUnderBody(c, t, cam);
+  if (want('under-life')) drawUnderLife(c, t, cam);
+}
+function drawUnderBody(c, t, cam) {
   const h0 = Math.min(cam.h, -22);
   const top = c.createLinearGradient(0, cam.hz - 1400, 0, cam.hz);
   top.addColorStop(0, C.uwTop); top.addColorStop(.7, '#8FE3F4'); top.addColorStop(1, C.uwSurf);
@@ -356,6 +368,8 @@ function drawUnder(c, t, cam) {
     c.fillStyle = g;
     c.beginPath(); c.moveTo(x, cam.hz - 200); c.lineTo(x + w, cam.hz - 200); c.lineTo(x + w * 1.8 - 420, cam.hz + 1100); c.lineTo(x - 420, cam.hz + 1100); c.closePath(); c.fill();
   }
+}
+function drawUnderLife(c, t, cam) {
   drawRibbons(c, t, CURRENTS, .55);
   // school of fish on a figure-of-eight
   const fx = 560 * osc(t, 2), fy = cam.hz + 330 + 140 * osc(t, 4, .25);
@@ -549,14 +563,18 @@ function compose(c, t) {
   // reset stroke state so every frame renders identically wherever rendering starts
   c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   c.lineCap = 'butt'; c.lineJoin = 'miter'; c.lineWidth = 1; c.setLineDash([]); c.lineDashOffset = 0;
-  c.fillStyle = C.skyMid; c.fillRect(0, 0, W, H);
+  if (PASS) c.clearRect(0, 0, W, H);
+  if (want('sky')) { c.fillStyle = C.skyMid; c.fillRect(0, 0, W, H); }
   const cam = camera(t);
   c.save(); c.translate(W / 2, H / 2); c.rotate(cam.roll);
   const wl = cam.hz + cam.h * KW;
   const above = wl - 40 > -EXT, under = wl + 40 < EXT;
   if (above) {
     c.save(); if (under) c.clip(waterlinePath(t, cam, false));
-    drawAbove(c, t, cam); drawSpeedLines(c, t, cam); drawMotes(c, t); drawRibbons(c, t);
+    drawAbove(c, t, cam);
+    if (want('speed')) drawSpeedLines(c, t, cam);
+    if (want('motes')) drawMotes(c, t);
+    if (want('wind')) drawRibbons(c, t);
     c.restore();
   }
   if (under) {
@@ -564,14 +582,21 @@ function compose(c, t) {
     drawUnder(c, t, cam);
     c.restore();
   }
-  if (above && under) drawWaterline(c, t, cam);
-  drawSplash(c, t, cam);
+  if (above && under && want('waterline')) drawWaterline(c, t, cam);
+  if (want('splash')) drawSplash(c, t, cam);
   c.restore();
 }
 function renderFrame(fi, N = 6) {
   const t0 = fi / FPS;
   if (N <= 1) compose(mctx, t0);
-  else {
+  else if (PASS) {
+    // a pass has transparency, so average the subframes additively instead of blending over
+    const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+    mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, W, H);
+    mctx.globalCompositeOperation = 'lighter'; mctx.globalAlpha = 1 / N;
+    for (let k = 0; k < N; k++) { compose(sc, t0 + ((k + .5) / N - .5) * shutter); mctx.drawImage(SUB, 0, 0); }
+    mctx.globalCompositeOperation = 'source-over'; mctx.globalAlpha = 1;
+  } else {
     const sc = SUB.getContext('2d'), shutter = .5 / FPS;
     for (let k = 0; k < N; k++) {
       compose(sc, t0 + ((k + .5) / N - .5) * shutter);
@@ -587,7 +612,8 @@ function renderFrame(fi, N = 6) {
  *  from the middle so every reverb and delay tail wraps seamlessly.
  *  Underwater, the whole mix goes through a closing low-pass.
  * ------------------------------------------------------------------ */
-async function renderAudio() {
+async function renderAudio(only) {                     // only: 'drums' | 'bass' | 'music' | 'fx' renders one stem
+  const on = cat => !only || only === cat;
   const SR = 48000, CYCLES = 3, LEN = SR * L * CYCLES;
   const ac = new OfflineAudioContext({ numberOfChannels: 2, length: LEN, sampleRate: SR });
   const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
@@ -620,12 +646,14 @@ async function renderAudio() {
   const sat = (() => { const n = 1024, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; cv[i] = Math.tanh(2 * x) / Math.tanh(2); } return cv; })();
 
   function kick(t, v) {
+    duck.gain.setValueAtTime(.35, t); duck.gain.linearRampToValueAtTime(1, t + .2);
+    if (!on('drums')) return;
     const o = ac.createOscillator(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(48, t + .1);
     const sh = ac.createWaveShaper(); sh.curve = sat;
     const g = ac.createGain(); env(g, t, .003, v, .34); o.connect(sh); sh.connect(g); g.connect(out); o.start(t); o.stop(t + .4);
-    duck.gain.setValueAtTime(.35, t); duck.gain.linearRampToValueAtTime(1, t + .2);
   }
   function clap(t, v, off) {
+    if (!on('drums')) return;
     const s = nsrc(), bp = filt('bandpass', 1500, .9), g = ac.createGain();
     g.gain.setValueAtTime(.0001, t - .001);
     for (let k = 0; k < 3; k++) { const tk = t + k * .01; g.gain.linearRampToValueAtTime(v, tk + .001); g.gain.exponentialRampToValueAtTime(v * .25, tk + .009); }
@@ -633,10 +661,12 @@ async function renderAudio() {
     s.connect(bp); bp.connect(g); panned(g, .05); sendTo(g, verb, .35); s.start(t, off); s.stop(t + .25);
   }
   function hat(t, v, open, off) {
+    if (!on('drums')) return;
     const s = nsrc(), hp = filt('highpass', open ? 6800 : 8500), g = ac.createGain(); env(g, t, .002, v, open ? .16 : .03);
     s.connect(hp); hp.connect(g); panned(g, open ? -.25 : .28); s.start(t, off); s.stop(t + (open ? .22 : .05));
   }
   function bass(t, dur, n, v) {
+    if (!on('bass')) return;
     const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = NOTE(n);
     const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.value = NOTE(n) / 2;
     const lp = filt('lowpass', 300, 4); lp.frequency.setValueAtTime(260, t); lp.frequency.linearRampToValueAtTime(900, t + .02); lp.frequency.exponentialRampToValueAtTime(260, t + dur);
@@ -646,6 +676,7 @@ async function renderAudio() {
     o.start(t); o2.start(t); o.stop(t + dur + .03); o2.stop(t + dur + .03);
   }
   function pad(t0, t1, notes, v) {
+    if (!on('music')) return;
     const lp = filt('lowpass', 2200), g = ac.createGain();
     g.gain.setValueAtTime(.0001, t0); g.gain.linearRampToValueAtTime(v, t0 + .35);
     g.gain.setValueAtTime(v, t1); g.gain.linearRampToValueAtTime(.0001, t1 + .9);
@@ -657,6 +688,7 @@ async function renderAudio() {
     }
   }
   function bell(t, n, v, p) {
+    if (!on('music')) return;
     const f = NOTE(n), g = ac.createGain(); env(g, t, .003, v, .7);
     for (const [ratio, amp, dec] of [[1, 1, .7], [2, .3, .35], [3.01, .1, .18]]) {
       const o = ac.createOscillator(); o.frequency.value = f * ratio;
@@ -665,6 +697,7 @@ async function renderAudio() {
     panned(g, p); sendTo(g, verb, .35); sendTo(g, delay, .45);
   }
   function whoosh(t, dur, v, p0, p1, off) {
+    if (!on('fx')) return;
     const s = nsrc(), bp = filt('bandpass', 400, 1.1);
     bp.frequency.setValueAtTime(350, t); bp.frequency.exponentialRampToValueAtTime(2600, t + dur * .6); bp.frequency.exponentialRampToValueAtTime(900, t + dur);
     const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur * .55); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
@@ -672,6 +705,7 @@ async function renderAudio() {
     s.connect(bp); bp.connect(g); g.connect(pn); pn.connect(out); sendTo(g, verb, .2); s.start(t, off); s.stop(t + dur + .02);
   }
   function splash(t, v, off) {
+    if (!on('fx')) return;
     const s = nsrc(), bp = filt('bandpass', 1300, .5), g = ac.createGain(); env(g, t, .004, v, .7);
     s.connect(bp); bp.connect(g); panned(g, 0, dry); sendTo(g, verb, .3); s.start(t, off); s.stop(t + .8);
     const s2 = nsrc(), hp = filt('highpass', 3000), g2 = ac.createGain(); env(g2, t + .05, .01, v * .5, 1.1);
@@ -683,15 +717,16 @@ async function renderAudio() {
     }
   }
   function bloop(t) {
+    if (!on('fx')) return;
     const o = ac.createOscillator(); o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(140, t + .35);
     const g = ac.createGain(); env(g, t, .004, .18, .4); o.connect(g); g.connect(dry); sendTo(g, verb, .5); o.start(t); o.stop(t + .45);
   }
 
   // continuous air rush that follows the camera's speed, and a low sea bed
   const air = nsrc(), airBp = filt('bandpass', 900, .6), airG = ac.createGain(); airG.gain.value = .0001;
-  air.connect(airBp); airBp.connect(airG); airG.connect(out); air.start(0, 1.7);
+  air.connect(airBp); airBp.connect(airG); airG.connect(out); if (on('fx')) air.start(0, 1.7);
   const bed = nsrc(), bedLp = filt('lowpass', 300), bedG = ac.createGain(); bedG.gain.value = .05;
-  bed.connect(bedLp); bedLp.connect(bedG); bedG.connect(out); bed.start(0, 6.1);
+  bed.connect(bedLp); bedLp.connect(bedG); bedG.connect(out); if (on('fx')) bed.start(0, 6.1);
 
   const CH = [[50, 57, 61, 64, 66], [54, 57, 61, 64, 69], [47, 54, 57, 61, 62], [55, 57, 59, 62, 66], [52, 55, 59, 62, 66], [57, 59, 61, 64, 66]];
   const ROOTS = [38, 42, 35, 43, 40, 45];
@@ -749,18 +784,26 @@ const ready = (async () => {
   return { missing: probes.filter(([f, s]) => !document.fonts.check(f, s)).map(([f]) => f) };
 })();
 window.__ready = ready;
-window.__frame = async (fi, n) => { renderFrame(fi, n ?? 6); return main.toDataURL('image/png'); };
-window.__audio = async () => {
-  const buf = await renderAudio();
+window.__frame = async (fi, n) => { PASS = null; renderFrame(fi, n ?? 6); return main.toDataURL('image/png'); };
+window.__passes = () => PASSES;
+window.__events = () => ({ dive: DIVE, breach: BREACH, bar: BAR });
+window.__framePasses = async (fi, n) => {
+  const out = [];
+  for (const p of PASSES) { PASS = p; renderFrame(fi, n ?? 6); out.push(main.toDataURL('image/png')); }
+  PASS = null;
+  return out;
+};
+window.__audio = async (stem, gain) => {           // stems reuse the mix's gain so their levels match it
+  const buf = await renderAudio(stem);
   const a = buf.getChannelData(0), b = buf.getChannelData(1), n = a.length;
   let peak = 0, sum = 0;
   for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i]), Math.abs(b[i])); sum += a[i] * a[i] + b[i] * b[i]; }
-  const g = peak > 0 ? .84 / peak : 1;        // about -16 LUFS
+  const g = gain ?? (peak > 0 ? .84 / peak : 1);        // about -16 LUFS
   const pcm = new Int16Array(n * 2);
   for (let i = 0; i < n; i++) { pcm[2 * i] = clamp(a[i] * g, -1, 1) * 32767; pcm[2 * i + 1] = clamp(b[i] * g, -1, 1) * 32767; }
   const bytes = new Uint8Array(pcm.buffer); let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)) };
+  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)), gain: g };
 };
 if (RENDER) return;
 
