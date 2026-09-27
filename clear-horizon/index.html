@@ -1,0 +1,688 @@
+<meta charset="utf-8">
+<title>Clear Horizon</title>
+<meta name="description" content="A fifteen-second seamless loop that suggests sea and clear sky with dots, lines and shapes, drawn in canvas code with a synthesized 64 BPM soundtrack.">
+<style>
+@font-face{font-family:"Martian Mono";src:url("fonts/martian-mono-500.woff2") format("woff2");font-weight:500;font-display:block}
+
+/* Page: one airy light look, painted explicitly (the piece itself is the colour). */
+:root{
+  color-scheme:light;
+  --ground:#E6F6FD; --panel:#F5FCFE; --line:#BEE3F3; --ink:#15307A; --muted:#4F77A8;
+  --klein:#2A3BFF; --aqua:#7CCFF2;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{font:14px/1.6 "Martian Mono",ui-monospace,"DejaVu Sans Mono",monospace;padding-inline:clamp(16px,4vw,48px);padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px}
+h1{margin:0;font-size:clamp(22px,3.6vw,36px);font-weight:500;letter-spacing:.06em;line-height:1.15;text-transform:uppercase;text-wrap:balance}
+h1 span{color:var(--klein)}
+.meta{margin:0;color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.screen{position:relative;aspect-ratio:16/9;max-width:100%;background:var(--aqua)}
+.screen canvas{display:block;width:100%;height:100%}
+.bigplay{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;border:0;background:var(--klein);color:#fff;cursor:pointer;display:grid;place-items:center;transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.bigplay:hover{transform:scale(1.07)}
+.bigplay svg{width:28px;height:28px;margin-left:4px}
+.controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px}
+.pp{min-width:92px;padding:9px 16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.pp:hover{border-color:var(--klein)}
+input[type=range]{width:100%;accent-color:var(--klein)}
+.tc{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{margin:0;color:var(--muted);font-size:12px;max-width:68ch}
+:focus-visible{outline:2px solid var(--klein);outline-offset:2px}
+@media (max-width:520px){.controls{grid-template-columns:auto 1fr}.tc{grid-column:1/-1}}
+body.render{padding:0;margin:0;background:#000}
+body.render .ui{display:none!important}
+body.render .wrap{max-width:none;display:block}
+body.render .screen{width:1920px;height:1080px}
+</style>
+
+<div class="wrap">
+  <header class="ui">
+    <h1>Clear Horizon<span>.</span></h1>
+    <p class="meta">15 s seamless loop · 64 bpm · 4 bars · 1920×1080 · 60p</p>
+  </header>
+  <div class="screen">
+    <canvas id="c" width="1920" height="1080" aria-label="Looping animation that suggests sea and sky with dots, lines and shapes"></canvas>
+    <button id="big" class="bigplay ui" type="button" aria-label="Play the loop with sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l16 9-16 9z" fill="currentColor"/></svg></button>
+  </div>
+  <div class="controls ui">
+    <button id="pp" class="pp" type="button">Play</button>
+    <input id="scrub" type="range" min="0" max="899" step="1" value="0" aria-label="Position in the loop">
+    <span id="tc" class="tc">00.00 s · bar 1</span>
+  </div>
+  <p class="note ui">Picture and music loop together every 15 seconds. A ripple crosses the dot sea on every bar, and each note of the arpeggio sets off a glint. Everything is drawn live by the code on this page.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const Q = new URLSearchParams(location.search);
+const RENDER = Q.has('render');
+if (RENDER) document.body.classList.add('render');
+
+const W = 1920, H = 1080, FPS = 60, L = 15, FRAMES = L * FPS;
+const BPM = 64, BEAT = 60 / BPM, BAR = 4 * BEAT;          // 4 bars of 3.75 s = one 15 s loop
+const TAU = Math.PI * 2;
+
+// Four colours only: sky-water blue, white, the reel's Klein blue, and yellow for the sun.
+const C = { aqua: '#7CCFF2', white: '#FFFFFF', klein: '#2A3BFF', sun: '#FFD400' };
+const F = {
+  mono: px => `500 ${px}px "Martian Mono", "DejaVu Sans Mono", monospace`
+};
+const HZ = 612, FOCAL = 900, CAMH = 260;   // horizon line, camera focal length and height above the water
+const SUNX = 1430, SUNY = 300;
+
+/* ------------------------------------------------------------------ *
+ *  Periodic time. Every moving thing is a function of t with period L,
+ *  so frame 900 is frame 0 and the loop has no seam.
+ * ------------------------------------------------------------------ */
+const frac = x => x - Math.floor(x);
+const cyc = (t, n = 1, o = 0) => frac(n * t / L + o);            // 0→1, n times per loop
+const osc = (t, n = 1, o = 0) => Math.sin(TAU * (n * t / L + o)); // n sine cycles per loop
+const wrapT = t => ((t % L) + L) % L;
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const prog = (a, b, x) => clamp((x - a) / (b - a));
+const smooth = t => t * t * (3 - 2 * t);
+const outCubic = t => 1 - Math.pow(1 - t, 3);
+const outExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const inOutCubic = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const wobble = (t, f = 4, d = 7) => t <= 0 ? 0 : Math.exp(-d * t) * Math.sin(TAU * f * t);
+const hash = n => frac(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rgba = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+function setFont(c, f, ls = 0) { c.font = f; c.letterSpacing = ls + 'px'; }
+function typeText(c, str, x, y, p) {
+  if (p <= 0) return;
+  c.textAlign = 'left'; c.fillText(str.slice(0, Math.floor(str.length * clamp(p) + 1e-6)), x, y);
+}
+
+const main = document.getElementById('c');
+const mctx = main.getContext('2d');
+const SUB = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; })();
+
+/* ------------------------------------------------------------------ *
+ *  The sea is a perspective field of dots. h(x, z, t) is the water
+ *  height in world units; swells roll toward the camera, and each bar
+ *  drops a ripple somewhere new.
+ * ------------------------------------------------------------------ */
+const ROWS = Array.from({ length: 23 }, (_, r) => 650 * Math.pow(1.118, r));
+const RIPPLES = [[-700, 1500], [820, 2300], [-120, 950], [1500, 1700]];
+const JUMP = { t0: 7.97, t1: 9.47, x: 330, z: 1180, h: 430, dx: 560 };
+function ringH(d, age, amp) {
+  if (age < 0 || age > 5) return 0;
+  return amp * Math.exp(-(((d - 430 * age) / 95) ** 2)) * Math.exp(-age * .8);
+}
+function seaH(x, z, t) {
+  let h = 16 * Math.sin(z * .0043 + x * .0005 + TAU * 2 * t / L)
+        + 9 * Math.sin(x * .0023 - z * .0016 + TAU * 3 * t / L + 1.3)
+        + 5 * Math.sin(x * .0051 + z * .0031 - TAU * 5 * t / L + .4);
+  const tw = wrapT(t), bar = Math.floor(tw / BAR), age = tw - bar * BAR;
+  for (const [k, a] of [[bar, age], [(bar + 3) % 4, age + BAR]]) {
+    const [rx, rz] = RIPPLES[k];
+    h += ringH(Math.hypot(x - rx, z - rz), a, 16);
+  }
+  const dj = Math.hypot(x - JUMP.x, z - JUMP.z);
+  h += ringH(dj, wrapT(t - JUMP.t0), 20) + ringH(dj, wrapT(t - JUMP.t1), 26);
+  return h;
+}
+const project = (x, z, h) => { const s = FOCAL / z; return [W / 2 + x * s, HZ + (CAMH - h) * s, s]; };
+
+function drawSea(c, t) {
+  for (let r = ROWS.length - 1; r >= 0; r--) {
+    const z = ROWS[r], s = FOCAL / z, rad = .8 + 4 * s, dx = 42;
+    const xmax = (W / 2 + 60) / s, off = (r % 2) * dx / 2;
+    const blue = new Path2D(), white = new Path2D();
+    for (let x = -Math.ceil(xmax / dx) * dx + off; x <= xmax; x += dx) {
+      const h = seaH(x, z, t), X = W / 2 + x * s, Y = HZ + (CAMH - h) * s;
+      const rr = rad * (1 + h / 70);
+      const p = h > 18 ? white : blue;
+      p.moveTo(X + rr, Y); p.arc(X, Y, rr, 0, TAU);
+    }
+    c.globalAlpha = clamp(1.35 - z / 5200, .12, 1);
+    c.fillStyle = C.klein; c.fill(blue);
+    c.fillStyle = C.white; c.fill(white);
+  }
+  c.globalAlpha = 1;
+}
+
+// Three wave lines ride chosen rows of dots; their dashes flow along the swell.
+function drawWaveLines(c, t) {
+  c.lineCap = 'round';
+  for (const [r, m, a] of [[1, 2, .9], [7, 1, .7], [13, 1, .5]]) {
+    const z = ROWS[r], s = FOCAL / z, xmax = (W / 2 + 60) / s;
+    c.strokeStyle = rgba(C.white, a); c.lineWidth = 1.2 + 2.2 * s;
+    c.setLineDash([90 * s + 20, 30 * s + 14]);
+    c.lineDashOffset = -(120 * s + 34) * cyc(t, m * 4);
+    c.beginPath();
+    for (let x = -xmax; x <= xmax; x += 24 / s) {
+      const X = W / 2 + x * s, Y = HZ + (CAMH - seaH(x, z, t)) * s - (rad(s) + 6);
+      if (x === -xmax) c.moveTo(X, Y); else c.lineTo(X, Y);
+    }
+    c.stroke();
+  }
+  c.setLineDash([]);
+}
+const rad = s => .8 + 4 * s;
+
+// The sun's path: a column of short white lines laid on the dot rows.
+function drawReflection(c, t) {
+  c.fillStyle = C.white;
+  for (let r = 0; r < ROWS.length; r++) {
+    const z = ROWS[r], s = FOCAL / z, x = (SUNX - W / 2) / s;
+    const Y = HZ + (CAMH - seaH(x, z, t)) * s + rad(s) + 4;
+    if (Y > H + 10) continue;
+    const segs = 1 + (r % 3), spread = 12 + 150 * s;
+    c.globalAlpha = clamp(1.2 - z / 6000, .25, .95);
+    for (let k = 0; k < segs; k++) {
+      const u = segs === 1 ? 0 : (k / (segs - 1) - .5) * 2;
+      const len = (8 + 70 * s) * (.35 + .65 * Math.abs(osc(t, 2 + (r + k) % 5, hash(r * 3 + k))));
+      const hh = 1.6 + 2.2 * s;
+      c.beginPath(); c.roundRect(SUNX + u * spread - len / 2 + 10 * osc(t, 1, hash(r)), Y, len, hh, hh / 2); c.fill();
+    }
+  }
+  c.globalAlpha = 1;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Horizon, sun, clouds, birds, wind — lines and shapes in the sky
+ * ------------------------------------------------------------------ */
+function drawHorizon(c, t) {
+  c.fillStyle = C.white; c.fillRect(0, HZ - 1.5, W, 3);
+  c.globalAlpha = .7;
+  for (let x = 24, k = 0; x < W; x += 48, k++) c.fillRect(x - 1, HZ + 4, 2, k % 5 ? 7 : 15);
+  // a bright segment travels the horizon once per bar
+  const p = frac(wrapT(t) / BAR), x = lerp(-200, W + 200, inOutCubic(p));
+  const g = c.createLinearGradient(x - 220, 0, x + 220, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.globalAlpha = 1; c.fillStyle = g; c.fillRect(x - 220, HZ - 3, 440, 6);
+}
+function drawSun(c, t) {
+  c.save(); c.beginPath(); c.rect(0, 0, W, HZ - 2); c.clip();
+  // pulse: a ring leaves the sun on every downbeat
+  c.lineWidth = 2.5;
+  for (let j = 0; j < 2; j++) {
+    const age = frac(wrapT(t) / BAR) + j; if (age > 1.7) continue;
+    const q = age / 1.7;
+    c.strokeStyle = rgba(C.white, .9 * Math.pow(1 - q, 1.4));
+    c.beginPath(); c.arc(SUNX, SUNY, 96 + 360 * outCubic(q), 0, TAU); c.stroke();
+  }
+  // two dashed orbits turning against each other
+  c.strokeStyle = rgba(C.white, .85); c.lineWidth = 2; c.lineCap = 'round';
+  c.setLineDash([3, 14]); c.lineDashOffset = -17 * cyc(t, 6);
+  c.beginPath(); c.arc(SUNX, SUNY, 150, 0, TAU); c.stroke();
+  c.setLineDash([40, 22]); c.lineDashOffset = 62 * cyc(t, 4);
+  c.beginPath(); c.arc(SUNX, SUNY, 190, 0, TAU); c.stroke();
+  c.setLineDash([]);
+  c.strokeStyle = C.white; c.lineWidth = 3;
+  c.beginPath(); c.arc(SUNX, SUNY, 94, 0, TAU); c.stroke();
+  c.fillStyle = C.sun; c.beginPath(); c.arc(SUNX, SUNY, 70 + 2 * osc(t, 4, .25), 0, TAU); c.fill();
+  // crosshair ticks, like a registration mark
+  c.fillStyle = C.white;
+  for (let k = 0; k < 4; k++) {
+    const a = k * TAU / 4 + TAU / 8 * osc(t, 1) * .15;
+    c.save(); c.translate(SUNX, SUNY); c.rotate(a); c.fillRect(214, -1.5, 26, 3); c.restore();
+  }
+  c.restore();
+}
+// Clouds are stacks of white bars. On every beat each bar eases to a new length
+// (expo out, staggered top to bottom); the 16-beat pattern repeats with the loop.
+function barLen(t, ph, k) {
+  const tw = wrapT(t + ph * L), beat = Math.floor(tw / BEAT), fr = tw / BEAT - beat;
+  const target = b => .5 + .5 * hash(((b % 16) + 16) % 16 * 7.3 + k * 1.9 + ph * 13);
+  return lerp(target(beat - 1), target(beat), outExpo(prog(k * .09, k * .09 + .6, fr)));
+}
+const CLOUDS = [
+  { x: 640, y: 180, rows: [[40, 250], [0, 400], [90, 210]], th: 22, ph: .04 },
+  { x: 1060, y: 96, rows: [[30, 170], [0, 260]], th: 16, ph: .37 },
+  { x: 250, y: 420, rows: [[0, 190], [50, 130]], th: 12, ph: .7 }
+];
+function drawClouds(c, t) {
+  c.fillStyle = C.white;
+  for (const cl of CLOUDS) {
+    const p = cyc(t, 1, cl.ph);
+    const a = smooth(prog(0, .2, p)) * smooth(prog(1, .8, p));
+    if (a <= .002) continue;
+    c.globalAlpha = a;
+    const x0 = cl.x + lerp(-110, 110, p);
+    cl.rows.forEach(([ox, len], k) => {
+      const l = len * barLen(t, cl.ph, k);
+      const y = cl.y + k * (cl.th + cl.th * .6);
+      c.beginPath(); c.roundRect(x0 + ox, y, l, cl.th, cl.th / 2); c.fill();
+    });
+  }
+  c.globalAlpha = 1;
+}
+function bird(c, x, y, s, a) {
+  c.strokeStyle = C.white; c.lineWidth = Math.max(2, s * .16); c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(x - s, y - s * a); c.lineTo(x, y); c.lineTo(x + s, y - s * a); c.stroke();
+}
+const flap = (t, o) => .15 + .55 * (.5 + .5 * osc(t, 18, o)) * (.4 + .6 * Math.max(0, osc(t, 3, o)));
+function drawBirds(c, t) {
+  const p = cyc(t, 1, .08);
+  bird(c, -120 + (W + 240) * p, 300 + 30 * osc(t, 2), 20, flap(t, 0));
+  bird(c, -170 + (W + 240) * p, 340 + 26 * osc(t, 2, .1), 14, flap(t, .31));
+  const q = cyc(t, 1, .55);
+  bird(c, -80 + (W + 160) * q, 470 + 12 * osc(t, 2, .4), 10, flap(t, .6));
+}
+const WIND_PTS = (() => {
+  const pts = [];
+  for (let i = 0; i <= 90; i++) { const u = i / 90; pts.push([u * 420, -Math.sin(u * Math.PI * 1.15) * 14]); }
+  const [ex, ey] = pts[pts.length - 1], R = 26, cx = ex, cy = ey - R;
+  for (let i = 1; i <= 46; i++) {
+    const a = Math.PI / 2 - i / 46 * TAU * .82, r = R * (1 - i / 46 * .42);
+    pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+  }
+  return pts;
+})();
+const WINDS = [{ t: 1.0, x: 90, y: 300 }, { t: 8.6, x: 900, y: 470 }];
+function drawWind(c, t) {
+  c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = C.white;
+  for (const w of WINDS) {
+    for (const [dy, dt, sc, lw] of [[0, 0, 1, 3], [24, .25, .6, 2]]) {
+      const lt = t - w.t - dt;
+      const e = inOutCubic(prog(0, 1.5, lt)), s = inOutCubic(prog(1.0, 2.6, lt));
+      if (e <= s) continue;
+      const n = WIND_PTS.length - 1, i0 = Math.floor(s * n), i1 = Math.ceil(e * n);
+      c.lineWidth = lw; c.beginPath();
+      for (let i = i0; i <= i1; i++) {
+        const [px, py] = WIND_PTS[i], X = w.x + 40 * dt * 4 + px * sc, Y = w.y + dy + py * sc;
+        if (i === i0) c.moveTo(X, Y); else c.lineTo(X, Y);
+      }
+      c.stroke();
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Shapes on the water: the sail (▲) and the reel's dot, leaping
+ * ------------------------------------------------------------------ */
+const SAIL = { x: -980, z: 1450 };
+function drawSail(c, t) {
+  const h = seaH(SAIL.x, SAIL.z, t), slope = (seaH(SAIL.x + 40, SAIL.z, t) - seaH(SAIL.x - 40, SAIL.z, t)) / 80;
+  const [X, Y, s] = project(SAIL.x, SAIL.z, h);
+  c.save(); c.translate(X, Y - rad(s) - 2); c.rotate(-Math.atan(slope * 2.2) * .8);
+  c.fillStyle = C.klein;
+  c.beginPath(); c.moveTo(0, -92); c.lineTo(46, -14); c.lineTo(0, -14); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(-6, -76); c.lineTo(-6, -14); c.lineTo(-34, -14); c.closePath(); c.fill();
+  c.fillStyle = C.white; c.beginPath(); c.roundRect(-40, -8, 88, 9, 4.5); c.fill();
+  c.restore();
+}
+function drawJump(c, t) {
+  const u = prog(JUMP.t0, JUMP.t1, t);
+  const [X0, Y0, s0] = project(JUMP.x, JUMP.z, 0);
+  // the dot: squash out of the water, stretch along the arc, squash back in
+  // motion path: the planned arc appears as dots, with keyframe diamonds at take-off, apex and landing
+  const pa = smooth(prog(JUMP.t0 - 1.1, JUMP.t0 - .3, t)) * (1 - smooth(prog(JUMP.t1 + .2, JUMP.t1 + 1, t)));
+  if (pa > .002) {
+    c.fillStyle = C.white;
+    const n = 26, shown = Math.floor(n * clamp(prog(JUMP.t0 - 1.1, JUMP.t0 - .4, t)));
+    for (let i = 0; i <= shown; i++) {
+      const q = i / n, [X, Y, s] = project(JUMP.x + (q - .5) * JUMP.dx, JUMP.z, JUMP.h * 4 * q * (1 - q));
+      c.globalAlpha = pa * (q <= u ? .35 : .9);
+      c.beginPath(); c.arc(X, Y - 40 * s * .6, 3.2, 0, TAU); c.fill();
+    }
+    c.globalAlpha = pa;
+    for (const q of [0, .5, 1]) {
+      const [X, Y, s] = project(JUMP.x + (q - .5) * JUMP.dx, JUMP.z, JUMP.h * 4 * q * (1 - q));
+      const k = q <= u ? 1 : .6;
+      c.save(); c.translate(X, Y - 40 * s * .6 - (q === .5 ? 34 : 22)); c.rotate(Math.PI / 4);
+      c.fillRect(-5 * k - 1, -5 * k - 1, 10 * k + 2, 10 * k + 2); c.restore();
+    }
+    c.globalAlpha = 1;
+  }
+  if (t > JUMP.t0 - .2 && t < JUMP.t1 + .15) {
+    const h = JUMP.h * 4 * u * (1 - u);
+    const [X, Y, s] = project(JUMP.x + (u - .5) * JUMP.dx, JUMP.z, h);
+    const r = 40 * s;
+    const v = Math.abs(1 - 2 * u), st = .45 * v * v;
+    let sx = 1 - st * .35, sy = 1 + st;
+    const pre = prog(JUMP.t0 - .2, JUMP.t0, t);
+    if (u === 0) { sx = 1 + .5 * Math.sin(Math.PI * pre); sy = 1 - .45 * Math.sin(Math.PI * pre); }
+    if (u > 0 && u < 1 || pre > 0 && u === 0) {
+      const ang = Math.atan2(-JUMP.h * 4 * (1 - 2 * u) * s, JUMP.dx * s);
+      c.save(); c.translate(X, Y - r * .6); c.rotate(u === 0 ? 0 : ang + Math.PI / 2); c.fillStyle = C.white;
+      c.beginPath(); c.ellipse(0, 0, r * sx, r * sy, 0, 0, TAU); c.fill(); c.restore();
+    }
+  }
+  // splash rings and droplets at take-off and re-entry
+  for (const [ts, dxw] of [[JUMP.t0, -JUMP.dx / 2], [JUMP.t1, JUMP.dx / 2]]) {
+    const age = t - ts; if (age < 0 || age > 1.8) continue;
+    const [X, Y, s] = project(JUMP.x + dxw, JUMP.z, 0);
+    c.lineWidth = 2.5;
+    for (const [d, sp] of [[0, 1], [.25, .7], [.5, .45]]) {
+      const q = prog(d, d + 1.3, age); if (q <= 0 || q >= 1) continue;
+      const R = (20 + 190 * sp * outCubic(q)) * s;
+      c.strokeStyle = rgba(C.white, .95 * (1 - q));
+      c.beginPath(); c.ellipse(X, Y, R, R * CAMH / JUMP.z, 0, 0, TAU); c.stroke();
+    }
+    c.fillStyle = C.white;
+    for (let k = 0; k < 12; k++) {
+      const a = -Math.PI / 2 + (hash(k * 3.3 + ts) - .5) * 2, sp = (180 + 240 * hash(k * 7.1 + ts)) * s;
+      const tt = age * .9; if (tt > .7) continue;
+      const px = X + Math.cos(a) * sp * tt, py = Y + Math.sin(a) * sp * tt + 700 * s * tt * tt;
+      if (py > Y + 3) continue;
+      c.globalAlpha = 1 - tt / .7; c.beginPath(); c.arc(px, py, (3 + 3 * hash(k + ts)) * s, 0, TAU); c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+}
+
+// Glints: one white star per arpeggio note (8ths), scattered on the sun's path.
+const GLINTS = Array.from({ length: 32 }, (_, j) => {
+  const r = 1 + Math.floor(hash(j * 5.3) * 16), z = ROWS[r], s = FOCAL / z;
+  const near = hash(j * 1.7) < .65;
+  const X = near ? SUNX + (hash(j * 3.1) - .5) * (60 + 260 * s) : 120 + hash(j * 7.7) * 1680;
+  return { t: j * BEAT / 2, r, x: (X - W / 2) / s };
+});
+function drawGlints(c, t) {
+  c.fillStyle = C.white;
+  for (const g of GLINTS) {
+    const age = wrapT(t - g.t); if (age > 1.3) continue;
+    const e = (1 - Math.exp(-age * 28)) * Math.exp(-age * 3.1);
+    const z = ROWS[g.r], s = FOCAL / z, h = seaH(g.x, z, t);
+    const [X, Y] = project(g.x, z, h), R = (10 + 22 * s) * e;
+    if (R < .3) continue;
+    c.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4 - Math.PI / 2, rr = k % 2 ? R * .14 : R;
+      const px = X + Math.cos(a) * rr, py = Y - rad(s) + Math.sin(a) * rr;
+      if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.closePath(); c.fill();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  HUD — carried over from the reel
+ * ------------------------------------------------------------------ */
+const pad2 = n => String(n).padStart(2, '0');
+function drawHUD(c, t, fi) {
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = C.white; c.strokeStyle = C.white; c.lineWidth = 2; c.globalAlpha = .92;
+  const m = 40, l = 22;
+  c.beginPath();
+  c.moveTo(m, m + l); c.lineTo(m, m); c.lineTo(m + l, m);
+  c.moveTo(W - m - l, m); c.lineTo(W - m, m); c.lineTo(W - m, m + l);
+  c.moveTo(m, H - m - l); c.lineTo(m, H - m); c.lineTo(m + l, H - m);
+  c.moveTo(W - m - l, H - m); c.lineTo(W - m, H - m); c.lineTo(W - m, H - m - l);
+  c.stroke();
+  setFont(c, F.mono(13), 2.4); c.textBaseline = 'middle';
+  c.textAlign = 'left'; c.fillText('CLEAR HORIZON — SEAMLESS LOOP', m + 40, m);
+  c.textAlign = 'right'; c.fillText(`TC 00:00:${pad2(Math.floor(fi / FPS))}:${pad2(fi % FPS)}`, W - m - 40, m);
+  c.textAlign = 'left'; c.fillText('SC.08 — SEA / SKY', m + 40, H - m);
+  const tw = wrapT(t), bar = Math.floor(tw / BAR), beat = Math.floor(tw / BEAT) % 4;
+  c.textAlign = 'right'; c.fillText(`BAR ${bar + 1} · BEAT ${beat + 1}`, W - m - 40 - 4 * 16 - 10, H - m);
+  for (let k = 0; k < 4; k++) {
+    const x = W - m - 40 - (3 - k) * 16 - 9;
+    if (k === beat) c.fillRect(x, H - m - 5, 10, 10); else c.strokeRect(x + 1, H - m - 4, 8, 8);
+  }
+  // time line: dashes scroll continuously (a whole number of dash periods per loop), so it never resets
+  c.globalAlpha = .6; c.lineWidth = 2; c.setLineDash([2, 14]); c.lineDashOffset = -16 * cyc(t, 8);
+  c.beginPath(); c.moveTo(m + 40, H - m + 18); c.lineTo(W - m - 40, H - m + 18); c.stroke(); c.setLineDash([]);
+  // spec line + swell oscilloscope (the reel's graph editor, reduced to a trace)
+  setFont(c, F.mono(12), 2.2); c.globalAlpha = .75; c.textAlign = 'left';
+  c.fillText('64 BPM · 4 BARS · 3,000 DOTS · 4 COLOURS', m + 40, 96);
+  const ox = m + 40, oy = 170, ow = 300, oh = 56;
+  c.globalAlpha = .45; c.fillRect(ox, oy, ow, 1);
+  c.globalAlpha = .75; setFont(c, F.mono(11), 2); c.fillText('SWELL h(t) · ▲', ox, oy - 42);
+  c.globalAlpha = .95; c.lineWidth = 2; c.lineJoin = 'round'; c.beginPath();
+  for (let i = 0; i <= 100; i++) {
+    const tt = t - (1 - i / 100) * 2.5, v = seaH(SAIL.x, SAIL.z, tt);
+    const X = ox + ow * i / 100, Y = oy - v / 40 * oh * .5;
+    if (i === 0) c.moveTo(X, Y); else c.lineTo(X, Y);
+  }
+  c.stroke();
+  const v = seaH(SAIL.x, SAIL.z, t);
+  c.beginPath(); c.arc(ox + ow, oy - v / 40 * oh * .5, 4.5, 0, TAU); c.fill();
+  c.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Frame assembly
+ * ------------------------------------------------------------------ */
+function compose(c, t) {
+  // reset every piece of stroke state a draw call might leave behind, so each frame renders the same
+  // whether it is the first one this page draws or the thousandth
+  c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  c.lineCap = 'butt'; c.lineJoin = 'miter'; c.lineWidth = 1; c.setLineDash([]); c.lineDashOffset = 0;
+  c.fillStyle = C.aqua; c.fillRect(0, 0, W, H);
+  drawSun(c, t);
+  drawClouds(c, t);
+  drawWind(c, t);
+  drawBirds(c, t);
+  drawSea(c, t);
+  drawReflection(c, t);
+  drawWaveLines(c, t);
+  drawHorizon(c, t);
+  drawSail(c, t);
+  drawJump(c, t);
+  drawGlints(c, t);
+}
+function renderFrame(fi, N = 4) {
+  const t0 = fi / FPS;
+  if (N <= 1) compose(mctx, t0);
+  else {
+    const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+    for (let k = 0; k < N; k++) {
+      compose(sc, t0 + ((k + .5) / N - .5) * shutter);
+      mctx.globalAlpha = 1 / (k + 1); mctx.drawImage(SUB, 0, 0);
+    }
+    mctx.globalAlpha = 1;
+  }
+  drawHUD(mctx, t0, fi);
+}
+
+/* ------------------------------------------------------------------ *
+ *  SOUND — 64 BPM, D major, rendered over three loop cycles and cut
+ *  from the middle so every reverb and delay tail wraps seamlessly.
+ * ------------------------------------------------------------------ */
+async function renderAudio() {
+  const SR = 48000, CYCLES = 3, LEN = SR * L * CYCLES;
+  const ac = new OfflineAudioContext({ numberOfChannels: 2, length: LEN, sampleRate: SR });
+  const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
+
+  // noise exactly one loop long, so looping noise sources repeat with the picture
+  const noise = ac.createBuffer(2, SR * L, SR);
+  { const r = rng(3); for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1; } }
+
+  const out = ac.createGain();
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 10; comp.ratio.value = 2.5; comp.attack.value = .01; comp.release.value = .25;
+  out.connect(comp); comp.connect(ac.destination);
+
+  const ir = ac.createBuffer(2, SR * 3.6, SR);
+  { const r = rng(5); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * Math.pow(1 - i / d.length, 3.8); } }
+  const verb = ac.createConvolver(); verb.buffer = ir;
+  const verbOut = ac.createGain(); verbOut.gain.value = .5; verb.connect(verbOut); verbOut.connect(out);
+
+  const delay = ac.createDelay(2); delay.delayTime.value = BEAT * .75;
+  const fb = ac.createGain(); fb.gain.value = .36;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+  delay.connect(dlp); dlp.connect(fb); fb.connect(delay);
+  const delOut = ac.createGain(); delOut.gain.value = .32; dlp.connect(delOut); delOut.connect(out); delOut.connect(verb);
+
+  const filt = (type, f, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); };
+  const sendTo = (node, dest, amt) => { const g = ac.createGain(); g.gain.value = amt; node.connect(g); g.connect(dest); };
+  const panned = (node, p) => { const pn = ac.createStereoPanner(); pn.pan.value = p; node.connect(pn); pn.connect(out); return pn; };
+  const nsrc = (off) => { const s = ac.createBufferSource(); s.buffer = noise; s.loop = true; s.loopEnd = L; return { s, off }; };
+
+  function kick(t, v) {
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(115, t); o.frequency.exponentialRampToValueAtTime(48, t + .14);
+    const g = ac.createGain(); env(g, t, .004, v, .36); o.connect(g); g.connect(out); o.start(t); o.stop(t + .42);
+  }
+  function shaker(t, v, off) {
+    const { s } = nsrc(); const bp = filt('bandpass', 7200, .9), g = ac.createGain(); env(g, t, .006, v, .065);
+    s.connect(bp); bp.connect(g); panned(g, .3); s.start(t, off); s.stop(t + .1);
+  }
+  function rim(t, v, off) {
+    const { s } = nsrc(); const bp = filt('bandpass', 2300, 3), g = ac.createGain(); env(g, t, .002, v, .05);
+    s.connect(bp); bp.connect(g); panned(g, -.15); sendTo(g, verb, .5); s.start(t, off); s.stop(t + .08);
+    const o = ac.createOscillator(); o.frequency.value = 1100; const og = ac.createGain(); env(og, t, .002, v * .5, .03);
+    o.connect(og); og.connect(out); sendTo(og, verb, .4); o.start(t); o.stop(t + .06);
+  }
+  function bass(t, dur, n, v) {
+    const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = NOTE(n);
+    const o2 = ac.createOscillator(); o2.type = 'triangle'; o2.frequency.value = NOTE(n) * 2;
+    const g2 = ac.createGain(); g2.gain.value = .18;
+    const lp = filt('lowpass', 520), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + .04);
+    g.gain.setValueAtTime(v, t + dur * .6); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(out);
+    o.start(t); o2.start(t); o.stop(t + dur + .05); o2.stop(t + dur + .05);
+  }
+  function pad(t0, t1, notes, v) {
+    const lp = filt('lowpass', 1500), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t0); g.gain.linearRampToValueAtTime(v, t0 + 1.1);
+    g.gain.setValueAtTime(v, t1); g.gain.linearRampToValueAtTime(.0001, t1 + 1.8);
+    lp.connect(g); g.connect(out); sendTo(g, verb, .7);
+    for (const n of notes) for (const [type, det] of [['triangle', -6], ['sine', 6]]) {
+      const o = ac.createOscillator(); o.type = type; o.frequency.value = NOTE(n); o.detune.value = det;
+      const pg = ac.createGain(); pg.gain.value = 1 / notes.length; o.connect(pg); pg.connect(lp);
+      o.start(t0); o.stop(t1 + 1.9);
+    }
+  }
+  function bell(t, n, v, p) {
+    const f = NOTE(n), g = ac.createGain(); env(g, t, .004, v, 1.2);
+    for (const [ratio, amp, dec] of [[1, 1, 1.2], [2, .35, .6], [3.01, .12, .3]]) {
+      const o = ac.createOscillator(); o.frequency.value = f * ratio;
+      const og = ac.createGain(); env(og, t, .003, amp, dec); o.connect(og); og.connect(g);
+      o.start(t); o.stop(t + dec + .05);
+    }
+    const pn = panned(g, p); sendTo(g, verb, .45); sendTo(g, delay, .55);
+    return pn;
+  }
+  function splash(t, off) {
+    const { s } = nsrc(); const bp = filt('bandpass', 1400, .6), g = ac.createGain(); env(g, t, .006, .16, .45);
+    s.connect(bp); bp.connect(g); panned(g, .25); sendTo(g, verb, .3); s.start(t, off); s.stop(t + .55);
+    for (let k = 0; k < 6; k++) {
+      const tk = t + .06 + k * .055 + hash(k + off) * .03;
+      const o = ac.createOscillator(); o.frequency.setValueAtTime(1700 + 1500 * hash(k * 3 + off), tk); o.frequency.exponentialRampToValueAtTime(900, tk + .05);
+      const og = ac.createGain(); env(og, tk, .002, .035, .05); o.connect(og); panned(og, .1 + .3 * hash(k)); o.start(tk); o.stop(tk + .08);
+    }
+  }
+
+  // continuous sea: a low bed plus a surge-and-fizz per bar that matches the picture's wash
+  const bed = nsrc(); const bedLp = filt('lowpass', 320), bedG = ac.createGain(); bedG.gain.value = .07;
+  bed.s.connect(bedLp); bedLp.connect(bedG); bedG.connect(out); bed.s.start(0, 0);
+  const surge = nsrc(); const surgeLp = filt('lowpass', 500, .8), surgeG = ac.createGain(); surgeG.gain.value = .015;
+  const surgePan = ac.createStereoPanner(); surge.s.connect(surgeLp); surgeLp.connect(surgeG); surgeG.connect(surgePan); surgePan.connect(out);
+  surge.s.start(0, 4.1);
+  const fizz = nsrc(); const fizzHp = filt('highpass', 2200, .5), fizzG = ac.createGain(); fizzG.gain.value = .0001;
+  fizz.s.connect(fizzHp); fizzHp.connect(fizzG); fizzG.connect(out); sendTo(fizzG, verb, .2); fizz.s.start(0, 9.3);
+
+  const CH = {
+    D: [50, 57, 61, 64, 66], Bm: [47, 54, 57, 61, 62], G: [55, 57, 59, 62, 66], A: [57, 59, 61, 64, 66]
+  };
+  const ROOTS = [[38, 45], [35, 42], [43, 38], [45, 40]];
+  const ARP = [
+    [74, 81, 78, 85, 81, 88, 85, 78],
+    [71, 78, 74, 81, 78, 85, 81, 74],
+    [74, 79, 78, 83, 81, 86, 83, 79],
+    [73, 76, 78, 83, 81, 88, 85, 81]
+  ];
+  const ORDER = ['D', 'Bm', 'G', 'A'];
+
+  for (let cy = 0; cy < CYCLES; cy++) {
+    const o = cy * L, r = rng(21);       // same seed every cycle → identical cycles
+    for (let bar = 0; bar < 4; bar++) {
+      const tb = o + bar * BAR;
+      pad(tb, tb + BAR, CH[ORDER[bar]], .05);
+      bass(tb, BEAT * 1.7, ROOTS[bar][0], .24);
+      bass(tb + BEAT * 2, BEAT * 1.4, ROOTS[bar][1], .15);
+      ARP[bar].forEach((n, k) => bell(tb + k * BEAT / 2 + (k % 2) * .012, n, (k % 2 ? .075 : .11) * (.9 + .2 * r()), k % 2 ? .38 : -.38));
+      for (let b = 0; b < 4; b++) {
+        const t = tb + b * BEAT;
+        if (b === 0 || b === 2) kick(t, b === 0 ? .5 : .34);
+        if (b === 1 || b === 3) rim(t, .1, r() * 10);
+        for (let s = 0; s < 4; s++) shaker(t + s * BEAT / 4 + (s % 2) * .02, [.035, .016, .055, .02][s] * (.85 + .3 * r()), r() * 10);
+      }
+      // wash: surge builds (p .05→.38), breaks into fizz, recedes by p .96
+      const P = p => tb + p * BAR;
+      // ramps only (no set-value steps), so nothing jumps at a bar line or at the loop point
+      surgeG.gain.linearRampToValueAtTime(.015, P(.05)); surgeG.gain.linearRampToValueAtTime(.2, P(.38)); surgeG.gain.linearRampToValueAtTime(.03, P(.96));
+      surgeLp.frequency.exponentialRampToValueAtTime(420, P(.05)); surgeLp.frequency.exponentialRampToValueAtTime(1900, P(.38)); surgeLp.frequency.exponentialRampToValueAtTime(480, P(.96));
+      surgePan.pan.linearRampToValueAtTime(-.35, P(.05)); surgePan.pan.linearRampToValueAtTime(.35, P(.96));
+      fizzG.gain.exponentialRampToValueAtTime(.0001, P(.33)); fizzG.gain.linearRampToValueAtTime(.075, P(.42)); fizzG.gain.exponentialRampToValueAtTime(.0015, P(.96));
+    }
+    splash(o + JUMP.t0, 2.2); splash(o + JUMP.t1, 6.7);
+  }
+
+  const full = await ac.startRendering();
+  const buf = new AudioBuffer({ numberOfChannels: 2, length: SR * L, sampleRate: SR });
+  for (let ch = 0; ch < 2; ch++) buf.copyToChannel(full.getChannelData(ch).subarray(SR * L, SR * L * 2), ch);
+  return buf;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Boot + render hooks
+ * ------------------------------------------------------------------ */
+const ready = (async () => {
+  const probes = [[F.mono(20), 'A']];
+  await Promise.all(probes.map(([f, s]) => document.fonts.load(f, s)));
+  await document.fonts.ready;
+  return { missing: probes.filter(([f, s]) => !document.fonts.check(f, s)).map(([f]) => f) };
+})();
+window.__ready = ready;
+window.__frame = async (fi, n) => { renderFrame(fi, n ?? 4); return main.toDataURL('image/png'); };
+window.__audio = async () => {
+  const buf = await renderAudio();
+  const a = buf.getChannelData(0), b = buf.getChannelData(1), n = a.length;
+  let peak = 0, sum = 0;
+  for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i]), Math.abs(b[i])); sum += a[i] * a[i] + b[i] * b[i]; }
+  const g = peak > 0 ? .56 / peak : 1;         // ~-5 dBFS peak: about -16 LUFS, calm next to the reel
+  const pcm = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { pcm[2 * i] = clamp(a[i] * g, -1, 1) * 32767; pcm[2 * i + 1] = clamp(b[i] * g, -1, 1) * 32767; }
+  const bytes = new Uint8Array(pcm.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)) };
+};
+if (RENDER) return;
+
+/* ------------------------------------------------------------------ *
+ *  Live player
+ * ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const pp = $('pp'), big = $('big'), scrub = $('scrub'), tcEl = $('tc');
+let playing = false, t = 0, actx = null, srcNode = null, audioBuf = null, clock0 = 0, raf = 0;
+const audioReady = renderAudio().then(b => { audioBuf = b; }).catch(() => { audioBuf = null; });
+function draw() {
+  const fi = Math.floor(((t % L) + L) % L * FPS) % FRAMES;
+  renderFrame(fi, 1);
+  scrub.value = fi;
+  tcEl.textContent = `${(fi / FPS).toFixed(2).padStart(5, '0')} s · bar ${Math.floor(fi / FPS / BAR) + 1}`;
+}
+const now = () => (actx && srcNode) ? actx.currentTime : performance.now() / 1000;
+function tick() { t = now() - clock0; draw(); raf = requestAnimationFrame(tick); }
+async function play() {
+  if (playing) return;
+  playing = true; big.hidden = true; pp.textContent = 'Pause';
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); await audioReady; } catch (e) { /* silent playback */ }
+  if (!playing) return;
+  const off = ((t % L) + L) % L;
+  if (actx && audioBuf) {
+    srcNode = actx.createBufferSource(); srcNode.buffer = audioBuf; srcNode.loop = true; srcNode.connect(actx.destination);
+    srcNode.start(0, off); clock0 = actx.currentTime - off;
+  } else { srcNode = null; clock0 = performance.now() / 1000 - off; }
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+}
+function stop() {
+  playing = false; pp.textContent = 'Play'; big.hidden = false; cancelAnimationFrame(raf);
+  if (srcNode) { try { srcNode.stop(); } catch (e) {} srcNode.disconnect(); srcNode = null; }
+}
+pp.addEventListener('click', () => playing ? stop() : play());
+big.addEventListener('click', play);
+scrub.addEventListener('input', () => { stop(); t = +scrub.value / FPS; draw(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playing ? stop() : play(); } });
+ready.then(draw);
+})();
+</script>
