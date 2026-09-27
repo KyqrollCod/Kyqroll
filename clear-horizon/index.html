@@ -59,6 +59,7 @@ body.render .screen{width:1920px;height:1080px}
 
 const Q = new URLSearchParams(location.search);
 const RENDER = Q.has('render');
+const SHOW_HUD = Q.has('hud');                 // the clean loop has no overlay; ?hud brings the reel's HUD back
 if (RENDER) document.body.classList.add('render');
 
 const W = 1920, H = 1080, FPS = 60, L = 15, FRAMES = L * FPS;
@@ -499,7 +500,7 @@ function drawSpeedLines(c, t, cam) {
 }
 
 /* ------------------------------------------------------------------ *
- *  HUD — carried over from the reel, now with an altitude gauge
+ *  HUD (optional, ?hud) — carried over from the reel, with an altitude gauge
  * ------------------------------------------------------------------ */
 const pad2 = n => String(n).padStart(2, '0');
 function drawHUD(c, t, fi) {
@@ -578,7 +579,7 @@ function renderFrame(fi, N = 6) {
     }
     mctx.globalAlpha = 1;
   }
-  drawHUD(mctx, t0, fi);
+  if (SHOW_HUD) drawHUD(mctx, t0, fi);
 }
 
 /* ------------------------------------------------------------------ *

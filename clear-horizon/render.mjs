@@ -4,6 +4,7 @@
 //   node render.mjs                       full render → out/clear-horizon.mp4
 //   node render.mjs --stills 120,300,480  render a few frames → out/stills/*.png + contact sheet
 //   node render.mjs --workers 4 --crf 17
+//   node render.mjs --hud                  include the HUD overlay (timecode, bar/beat, altitude gauge)
 //
 // Needs Playwright's Chromium and an ffmpeg build with libx264 (set FFMPEG=/path/to/ffmpeg).
 
@@ -42,7 +43,7 @@ async function openPage(browser, port) {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   page.on('pageerror', e => console.error('[page error]', e.message));
   page.on('console', m => { if (m.type() === 'error') console.error('[console]', m.text()); });
-  await page.goto(`http://127.0.0.1:${port}/index.html?render`);
+  await page.goto(`http://127.0.0.1:${port}/index.html?render${args.hud ? '&hud' : ''}`);
   const info = await page.evaluate(() => window.__ready);
   if (info.missing.length) throw new Error('Fonts failed to load: ' + info.missing.join(', '));
   return page;
