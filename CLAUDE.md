@@ -1,5 +1,13 @@
 # Working notes for Claude
 
+## When the user sends articles/posts to "learn"
+- The user delegates reading entirely and won't read them. Fetch everything, including
+  threads, replies, quoted articles and media.
+- Save only what changes behavior or adds new facts (skills/CLAUDE.md). Don't re-save what
+  is already covered.
+- Report in Japanese, tersely, sorted into: new facts / what changes in my behavior /
+  discounted as promo or unverified / nothing new. Say plainly when an article adds nothing.
+
 ## Learned practices (from "Claude×Codex agent design" article, 2026-10)
 - For multi-step builds, delegation, or stuck fixes, follow `.claude/skills/team-brief/SKILL.md`.
 - Spec lives in one file (`docs/spec.md`). CLAUDE.md and AGENTS.md (Codex) only point to it
