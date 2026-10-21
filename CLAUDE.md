@@ -22,6 +22,19 @@
   Try once manually before scheduling (timezone, end date, notification, output location).
 - "No record" ≠ "not done": flag as a check candidate, don't assert.
 
+## Learned practices (X posts, 2026-10-20)
+- Autonomous/long-running or "keep going until it works" tasks: follow
+  `.claude/skills/verified-loop/SKILL.md` (external verifier, state log, budget and stop
+  conditions, commit per kept step; judge by cost per accepted result).
+- Parallel sessions: one worktree per worker, subagents to keep the main context clean,
+  `/btw` for side questions (see team-brief §3b).
+- 3D work: build scenes as parameterized Blender Python scripts
+  (`.claude/skills/blender-scripting/SKILL.md`). Render a preview and look at it before claiming success.
+- Usage limits hit quickly → run `/usage` first (shows share used by Skills, subagents,
+  plugins and MCP servers, plus recurring jobs like `/loop` with run counts and tokens per run).
+  Disable unused MCP servers via `/mcp` and stop forgotten loops or background jobs before
+  micro-optimizing prompts.
+
 ## Codex plugin for Claude Code (openai/codex-plugin-cc), reference
 - Install: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`,
   `/reload-plugins`, `/codex:setup` (auth: `codex login`). Uses Codex's own quota, not Claude's.

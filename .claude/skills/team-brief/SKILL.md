@@ -37,6 +37,21 @@ Each task states: files it owns, prerequisite tasks, how to verify, what to retu
 - Choose the mode per task: solo (small, one owner) / second opinion (review) /
   parallel (truly independent). Don't run heavy multi-agent review on doc typos.
 
+## 3b. Running workers in parallel
+- One isolated workspace per parallel worker: a git worktree/branch per session (Claude Code
+  desktop parallel sessions or `isolation: "worktree"` subagents). No two workers on the same files.
+- Protect the coordinator's context: send broad searches, dependency analysis and test/fix
+  iterations to subagents and keep only their conclusions. The main thread keeps summaries
+  and decisions only.
+- Side questions mid-run go to a side channel (`/btw` in Claude Code) so the main plan isn't
+  derailed.
+- Keep parallelism small (≈ up to 4 workers) and only for truly independent tasks. The human
+  reviews diffs of sessions that reach "needs input" or "completed", then integrates and
+  re-runs all tests.
+- What makes any agent tool work is the same everywhere: a clear design hand-off, the right
+  files and rules to read, and a self-running mechanism with verification. Don't chase tool
+  features at the expense of that.
+
 ## 4. Delegation prompt template
 ```
 Read docs/spec.md and docs/tasks.md. Implement only <task>, touching only <files>.
