@@ -64,9 +64,9 @@
   trialled, use an isolated machine/workspace with no secrets and minimal permissions.
 
 ## Image generation routes (Claude can't output raster images natively)
-- Via Codex: through the Codex plugin, ask Codex to use its built-in image generation
-  (`$imagegen`, gpt-image-2 per third-party guides; unverified against official docs). Save into the
-  project folder and Read the file to check the image. Uses Codex quota.
+- Default: `.claude/skills/codex-imagegen/SKILL.md` (`scripts/codex-imagegen.sh` → Codex
+  `$imagegen`, then verify and look at the file). The user accepts the Codex quota cost and
+  delegates the whole setup and generation to Claude.
 - Direct API: a small script or MCP server calling an image API (e.g. OpenAI Images) with the
   user's API key. No second agent needed.
 - Connectors here: Canva `generate-image`, Figma `generate_image`, Adobe Firefly tools. They
