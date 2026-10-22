@@ -43,6 +43,18 @@
   Disable unused MCP servers via `/mcp` and stop forgotten loops or background jobs before
   micro-optimizing prompts.
 
+## Claude Duet (announced 2026-10-21), reference
+- Anthropic's proactive agent app (Opus 5.5), the counterpart to ChatGPT dots. It runs on its own
+  cloud VM with a browser and keeps working when the app is closed.
+- Features: morning brief (email/calendar priorities + draft replies), checks connected apps
+  every few hours, a Tasks tab, a Make tab for files (decks, models, dashboards), and one main
+  thread plus topic channels.
+- Shares memory, skills and connectors with the Claude account, so skills and knowledge-vault
+  practices carry over.
+- Asks before sending, paying, signing or deleting. Only the user can mark a task finished.
+- Research preview: waitlist, Pro/Max, US only (no Team/Enterprise yet). Web, iOS and Android.
+  No extra fee, but background work counts against plan usage limits.
+
 ## Codex plugin for Claude Code (openai/codex-plugin-cc), reference
 - Install: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`,
   `/reload-plugins`, `/codex:setup` (auth: `codex login`). Uses Codex's own quota, not Claude's.
