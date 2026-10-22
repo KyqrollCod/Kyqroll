@@ -63,6 +63,16 @@
 - Only worth it with a concrete need (e.g. teammates' agents coordinating on one repo). If
   trialled, use an isolated machine/workspace with no secrets and minimal permissions.
 
+## Image generation routes (Claude can't output raster images natively)
+- Via Codex: through the Codex plugin, ask Codex to use its built-in image generation
+  (`$imagegen`, gpt-image-2 per third-party guides; unverified against official docs). Save into the
+  project folder and Read the file to check the image. Uses Codex quota.
+- Direct API: a small script or MCP server calling an image API (e.g. OpenAI Images) with the
+  user's API key. No second agent needed.
+- Connectors here: Canva `generate-image`, Figma `generate_image`, Adobe Firefly tools. They
+  need the user to authorize them in claude.ai connector settings first.
+- An agent-to-agent network (Reason Network) is not needed for this.
+
 ## Codex plugin for Claude Code (openai/codex-plugin-cc), reference
 - Install: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`,
   `/reload-plugins`, `/codex:setup` (auth: `codex login`). Uses Codex's own quota, not Claude's.
