@@ -1,5 +1,9 @@
 # Working notes for Claude
 
+## Git workflow preference
+- The user doesn't handle git. After pushing learning or skill changes, open the PR, mark it ready
+  and merge it yourself, then tell the user it's done.
+
 ## When the user sends articles/posts to "learn"
 - The user delegates reading entirely and won't read them. Fetch everything, including
   threads, replies, quoted articles and media.
@@ -42,6 +46,16 @@
   plugins and MCP servers, plus recurring jobs like `/loop` with run counts and tokens per run).
   Disable unused MCP servers via `/mcp` and stop forgotten loops or background jobs before
   micro-optimizing prompts.
+
+## 3D hair: HairDeck (2026-11), reference
+- github.com/hyz317/HairDeck (Apache-2.0): one character image → stylized hair cards with
+  spring-bone chains. Outputs GLB (+ no-head GLB), VRM avatar, turn preview mp4, and card/chain JSON.
+  Gives geometry, UVs and hair color only, no textures (cards still need painting).
+- Local run needs Linux x86-64, an NVIDIA CUDA GPU, Python 3.12, ffmpeg and Blender 4.2 + VRM
+  add-on. It also needs gated SAM 3 / DINOv3 weights (accept licenses on Hugging Face, `hf auth login`).
+  No local GPU → use the HF Space demo: huggingface.co/spaces/hyz317/HairDeck.
+- Pick the VRM export for moving hair: a user reported the GLB had no skin/joint weights while
+  the VRM had them plus spring-bone groups. Early quality is mixed per replies.
 
 ## Claude Duet (announced 2026-10-21), reference
 - Anthropic's proactive agent app (Opus 5.5), the counterpart to ChatGPT dots. It runs on its own
