@@ -73,6 +73,17 @@
   need the user to authorize them in claude.ai connector settings first.
 - An agent-to-agent network (Reason Network) is not needed for this.
 
+## UI polish: unslop (third-party skill, CC BY 4.0)
+- `.claude/skills/unslop/` is copied verbatim from github.com/heydamir/unslop (commit 1d13095),
+  by Damir Sokolovsky (@heydamir). Keep the credit lines, and keep the "unslop by @heydamir"
+  credit on story videos.
+- Use it for "AIっぽい" landing pages, dashboards and app screens: audit → direction (wait for
+  the user's OK) → 9 passes. If the screen is already good, make only small fixes.
+- When its Visuals pass needs a generated image, use `codex-imagegen` as the image tool.
+- Live-site snapshots and story videos need Playwright + Chromium (`npm install -D playwright`,
+  `npx playwright install chromium`) and ffmpeg. The scripts were reviewed: local only, plus
+  fetching the target page's own assets.
+
 ## Codex plugin for Claude Code (openai/codex-plugin-cc), reference
 - Install: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`,
   `/reload-plugins`, `/codex:setup` (auth: `codex login`). Uses Codex's own quota, not Claude's.
