@@ -67,6 +67,13 @@
 - Synergy: `codex-imagegen` makes original source art. HairDeck is an experimental hair swap,
   done via the VRM export.
 
+## 2D moving avatar (Live2D alternative): Mesh Avatar Studio (2026-11), reference
+- github.com/shinshin86/mesh-avatar-studio (MIT): one illustration → 2D mesh avatar with blink, lip
+  sync, head turn and hair sway, streamed to OBS/Zoom/Meet. Follow `.claude/skills/mesh-avatar/SKILL.md`.
+- Claude Code (Opus 5.5) is a recommended builder via the repo's agent guide. Codex only draws the
+  eye/mouth variants. Doesn't export real Live2D (.moc3).
+- The user wants Live2D ideally. This is the current alternative, and Charakuru covers 3D VRM.
+
 ## Claude Duet (announced 2026-10-21), reference
 - Anthropic's proactive agent app (Opus 5.5), the counterpart to ChatGPT dots. It runs on its own
   cloud VM with a browser and keeps working when the app is closed.
