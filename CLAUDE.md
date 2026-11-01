@@ -62,6 +62,8 @@
   (images, Tripo via browser, Blender MCP). Follow `.claude/skills/charakuru-assist/SKILL.md`.
 - Custom source-available license: never copy the kit or its assets into this repo. Commercial use
   is fine below ¥100M revenue and below ¥100M funding.
+- Director mode: Claude relays the app's request text plus checks to Codex with
+  `scripts/charakuru-relay.sh` (run `--check` first, which is free) and gates every paid step.
 - Synergy: `codex-imagegen` makes original source art. HairDeck is an experimental hair swap,
   done via the VRM export.
 
