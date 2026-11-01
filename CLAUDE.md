@@ -57,6 +57,14 @@
 - Pick the VRM export for moving hair: a user reported the GLB had no skin/joint weights while
   the VRM had them plus spring-bone groups. Early quality is mixed per replies.
 
+## Avatars from one illustration: Charakuru (きゃらくる, 2026-10), reference
+- Nano's kit, sponsored by Tripo: one full-body illustration → VRM 1.0, with Codex doing the work
+  (images, Tripo via browser, Blender MCP). Follow `.claude/skills/charakuru-assist/SKILL.md`.
+- Custom source-available license: never copy the kit or its assets into this repo. Commercial use
+  is fine below ¥100M revenue and below ¥100M funding.
+- Synergy: `codex-imagegen` makes original source art. HairDeck is an experimental hair swap,
+  done via the VRM export.
+
 ## Claude Duet (announced 2026-10-21), reference
 - Anthropic's proactive agent app (Opus 5.5), the counterpart to ChatGPT dots. It runs on its own
   cloud VM with a browser and keeps working when the app is closed.
