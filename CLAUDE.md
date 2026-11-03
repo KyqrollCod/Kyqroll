@@ -115,6 +115,12 @@
   `npx playwright install chromium`) and ffmpeg. The scripts were reviewed: local only, plus
   fetching the target page's own assets.
 
+## Persona-concept LPs (from LEAD OTAKU analysis, 2026-11)
+- For a punchy Japanese service or lead-gen LP, follow `.claude/skills/persona-lp/SKILL.md`: a
+  persona that turns a weakness into the reason to hire, a promise loop (habit → だから → benefit),
+  motif windows, a mascot crew, a 480px column with PC side panels, and dual CTAs.
+- Borrow the structure only. Never their copy, characters or brand.
+
 ## Codex plugin for Claude Code (openai/codex-plugin-cc), reference
 - Install: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`,
   `/reload-plugins`, `/codex:setup` (auth: `codex login`). Uses Codex's own quota, not Claude's.
