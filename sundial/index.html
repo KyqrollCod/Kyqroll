@@ -1,0 +1,1471 @@
+<meta charset="utf-8">
+<title>Sundial</title>
+<meta name="description" content="One day in a seaside room as a thirty-second seamless loop: dawn, a sunrise, noon, a long golden afternoon, sunset and night, with the window's light sweeping the floor like a sundial. Drawn in canvas code with a synthesized soundtrack.">
+<style>
+:root{
+  color-scheme:light;
+  --ground:#F4F1EC; --panel:#FBFAF7; --line:#E2DCD3; --ink:#2B2E4A; --muted:#6F6A86;
+  --accent:#DE7E59; --sea:#1C7FBB;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{font:14px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;padding-inline:clamp(16px,4vw,48px);padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px}
+h1{margin:0;font-size:clamp(26px,4.4vw,44px);font-weight:700;letter-spacing:-.01em;line-height:1.1;text-wrap:balance}
+h1 span{color:var(--accent)}
+.meta{margin:0;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.screen{position:relative;aspect-ratio:16/9;max-width:100%;background:#1E2657;box-shadow:0 18px 40px -26px rgba(43,46,74,.55)}
+.screen canvas{display:block;width:100%;height:100%}
+.bigplay{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;border:0;background:var(--accent);color:#fff;cursor:pointer;display:grid;place-items:center;transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.bigplay:hover{transform:scale(1.07)}
+.bigplay svg{width:28px;height:28px;margin-left:4px}
+.controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px}
+.pp{min-width:92px;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.pp:hover{border-color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.tc{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{margin:0;color:var(--muted);font-size:13px;max-width:68ch}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){.controls{grid-template-columns:auto 1fr}.tc{grid-column:1/-1}}
+body.render{padding:0;margin:0;background:#000}
+body.render .ui{display:none!important}
+body.render .wrap{max-width:none;display:block}
+body.render .screen{width:1920px;height:1080px;box-shadow:none}
+</style>
+
+<div class="wrap">
+  <header class="ui">
+    <h1>Sundial<span>.</span></h1>
+    <p class="meta">30 s seamless loop · 96 bpm · dawn to dawn · 1920×1080 · 60p</p>
+  </header>
+  <div class="screen">
+    <canvas id="c" width="1920" height="1080" aria-label="Looping animation of one day in a seaside room, from dawn through noon, sunset and night"></canvas>
+    <button id="big" class="bigplay ui" type="button" aria-label="Play the loop with sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l16 9-16 9z" fill="currentColor"/></svg></button>
+  </div>
+  <div class="controls ui">
+    <button id="pp" class="pp" type="button">Play</button>
+    <input id="scrub" type="range" min="0" max="1799" step="1" value="0" aria-label="Position in the loop">
+    <span id="tc" class="tc">00.00 s · 04:36</span>
+  </div>
+  <p class="note ui">A day passes through a room by the sea. The window's light walks across the floor like the shadow of a sundial: long at sunrise, short at noon, long again and golden before sunset, pale blue under the moon. Everything is drawn live by the code on this page.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const Q = new URLSearchParams(location.search);
+const RENDER = Q.has('render');
+if (RENDER) document.body.classList.add('render');
+
+const W = 1920, H = 1080, FPS = 60;
+const BPM = 96, BEAT = 60 / BPM, BEATS = 48, L = BEATS * BEAT, FRAMES = Math.round(L * FPS);   // 12 bars = 30 s
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+
+/* ------------------------------------------------------------------ *
+ *  Helpers
+ * ------------------------------------------------------------------ */
+const frac = x => x - Math.floor(x);
+const wrapB = b => ((b % BEATS) + BEATS) % BEATS;
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const prog = (a, b, x) => clamp((x - a) / (b - a));
+const smooth = t => t * t * (3 - 2 * t);
+const inCubic = t => t * t * t;
+const outCubic = t => 1 - Math.pow(1 - t, 3);
+const inOutCubic = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const outQuint = t => 1 - Math.pow(1 - t, 5);
+const inOutQuint = t => t < .5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
+const outExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const inExpo = t => t <= 0 ? 0 : Math.pow(2, 10 * t - 10);
+const inOutExpo = t => t <= 0 ? 0 : t >= 1 ? 1 : t < .5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2;
+const inOutSine = t => -(Math.cos(Math.PI * t) - 1) / 2;
+const outBack = (t, s = 1.7) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
+const pop = (x, a, d = .3, s = 1.7) => { const p = prog(a, a + d, x); return p <= 0 ? 0 : outBack(p, s); };
+const hash = n => frac(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// anything that repeats inside the loop runs a whole number of times per 30 s
+const cyc = (t, n = 1, o = 0) => frac(n * t / L + o);
+const osc = (t, n = 1, o = 0) => Math.sin(TAU * (n * t / L + o));
+
+/* ------------------------------------------------------------------ *
+ *  Colour. Palettes are keyed by the hour and blended in OKLab, so a
+ *  sunset passes through believable in-between colours.
+ * ------------------------------------------------------------------ */
+const hexRgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const toLin = v => { v /= 255; return v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); };
+const toSrgb = v => { v = v <= .0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - .055; return clamp(v) * 255; };
+function rgbLab([r, g, b]) {
+  r = toLin(r); g = toLin(g); b = toLin(b);
+  const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+  const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+  const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+  return [.2104542553 * l + .7936177850 * m - .0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + .4505937099 * s, .0259040371 * l + .7827717662 * m - .8086757660 * s];
+}
+function labRgb([L_, a, b]) {
+  const l = Math.pow(L_ + .3963377774 * a + .2158037573 * b, 3);
+  const m = Math.pow(L_ - .1055613458 * a - .0638541728 * b, 3);
+  const s = Math.pow(L_ - .0894841775 * a - 1.2914855480 * b, 3);
+  return [toSrgb(4.0767416621 * l - 3.3077115913 * m + .2309699292 * s), toSrgb(-1.2684380046 * l + 2.6097574011 * m - .3413193965 * s), toSrgb(-.0041960863 * l - .7034186147 * m + 1.7076147010 * s)];
+}
+const css = (rgb, a = 1) => `rgba(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])},${a})`;
+const mixRgb = (p, q, t) => labRgb(rgbLab(p).map((v, i) => lerp(v, rgbLab(q)[i], t)));
+
+// palette roles, sampled from the colour reference at each hour of the day
+const ROLES = ['skyTop', 'skyMid', 'skyHor', 'sun', 'glow', 'sea', 'seaNear', 'seaLine', 'glitter', 'isle', 'isleFar', 'cloud', 'cloudShade',
+  'wall', 'wallShade', 'frame', 'frameSide', 'floor', 'floorLine', 'lit', 'curtain', 'curtainShade', 'ink', 'gold', 'lav', 'leaf', 'leafShade', 'glass', 'shadow'];
+const KEYS = [
+  [0, { skyTop: '#07163F', skyMid: '#18306A', skyHor: '#3C4E92', sun: '#F6F1E1', glow: '#9DA6DE', sea: '#0B2254', seaNear: '#16306A', seaLine: '#5865A8', glitter: '#E4E4F6', isle: '#071231', isleFar: '#15265A', cloud: '#2A3B78', cloudShade: '#1B2A5E',
+    wall: '#34427E', wallShade: '#27336A', frame: '#46559A', frameSide: '#313E7A', floor: '#2E3B74', floorLine: '#27336A', lit: '#9CA3DC', curtain: '#5A66AA', curtainShade: '#424D8E', ink: '#EAE8F7', gold: '#EDB866', lav: '#8D91CC', leaf: '#28464C', leafShade: '#1C343C', glass: '#8FA4E0', shadow: '#10183F' }],
+  [4.6, { skyTop: '#16245A', skyMid: '#3E4588', skyHor: '#9C8DBE', sun: '#F6F1E1', glow: '#C4B4DC', sea: '#1F2B64', seaNear: '#2A3570', seaLine: '#7C80BC', glitter: '#EFDCE0', isle: '#141B46', isleFar: '#343B78', cloud: '#5B5D9E', cloudShade: '#3F4386',
+    wall: '#4A4F88', wallShade: '#373C74', frame: '#5A5F9A', frameSide: '#42477F', floor: '#3E4380', floorLine: '#343970', lit: '#B7A9D6', curtain: '#6F72B0', curtainShade: '#555899', ink: '#EEE8F4', gold: '#EDB866', lav: '#9C95CC', leaf: '#34494E', leafShade: '#263A42', glass: '#A3A6DA', shadow: '#1C1F52' }],
+  [6.1, { skyTop: '#5775B8', skyMid: '#B0A3D0', skyHor: '#F7C3A2', sun: '#FFE7B8', glow: '#FFC9A0', sea: '#4868A6', seaNear: '#5A7DBA', seaLine: '#D6D6EE', glitter: '#FFE4C0', isle: '#4E5690', isleFar: '#8A88BA', cloud: '#F4D2CC', cloudShade: '#A493C2',
+    wall: '#E3D6DA', wallShade: '#8C84B4', frame: '#E6DDE0', frameSide: '#B6A9C0', floor: '#9A90BA', floorLine: '#A69CB8', lit: '#FFE0C4', curtain: '#EADFE4', curtainShade: '#B3A7C6', ink: '#FFF6EE', gold: '#E9AE5C', lav: '#B0A3D0', leaf: '#4C6B58', leafShade: '#3A5446', glass: '#C4C9EE', shadow: '#5E5A8A' }],
+  [8, { skyTop: '#3A93D6', skyMid: '#84BCE5', skyHor: '#D7E7F3', sun: '#FFF8E4', glow: '#FFFFFF', sea: '#1A7DBA', seaNear: '#3C9ED4', seaLine: '#C4E2F4', glitter: '#FFFFFF', isle: '#5A7BA2', isleFar: '#94B0CC', cloud: '#FFFFFF', cloudShade: '#C6D6EC',
+    wall: '#F4EFE7', wallShade: '#9CA3D3', frame: '#FBF9F5', frameSide: '#BFBAD2', floor: '#A9AED8', floorLine: '#979DCB', lit: '#FFF4E2', curtain: '#FBF9F7', curtainShade: '#C3C6E0', ink: '#FFFFFF', gold: '#E2A646', lav: '#9FA9DC', leaf: '#5A905B', leafShade: '#3E6C4A', glass: '#BFE0F4', shadow: '#7F86B4' }],
+  [12, { skyTop: '#3AAAE8', skyMid: '#8BD1F1', skyHor: '#E6F6FC', sun: '#FFFFFF', glow: '#FFFFFF', sea: '#1DB2D8', seaNear: '#6BDAEB', seaLine: '#E4FAFF', glitter: '#FFFFFF', isle: '#6AA2BC', isleFar: '#A7CFE0', cloud: '#FFFFFF', cloudShade: '#CFE6F2',
+    wall: '#F7F9FB', wallShade: '#A6BADF', frame: '#FFFFFF', frameSide: '#DAE2EE', floor: '#B7C7E4', floorLine: '#A4B6D8', lit: '#FFFFFF', curtain: '#FFFFFF', curtainShade: '#D6DFEE', ink: '#FFFFFF', gold: '#EBB64A', lav: '#A9B6E6', leaf: '#6CA66A', leafShade: '#4C8454', glass: '#C8F0F8', shadow: '#8FA6C6' }],
+  [15.6, { skyTop: '#3A8ED2', skyMid: '#8FC0E2', skyHor: '#EEE4D6', sun: '#FFF6DA', glow: '#FFF1D0', sea: '#1D78B4', seaNear: '#3D96CC', seaLine: '#D2E6F2', glitter: '#FFF8E6', isle: '#5F7C9E', isleFar: '#9DB2C8', cloud: '#FFFBF2', cloudShade: '#CDD5E6',
+    wall: '#F4EDE3', wallShade: '#A69DC6', frame: '#FAF5EE', frameSide: '#D8CCC0', floor: '#B5AFD0', floorLine: '#A29CC0', lit: '#FFF1D6', curtain: '#FAF4EE', curtainShade: '#CFC8DA', ink: '#FFFFFF', gold: '#E6A646', lav: '#A6A8D8', leaf: '#5E8C57', leafShade: '#436B45', glass: '#C6DDEE', shadow: '#9A94B0' }],
+  [17.4, { skyTop: '#5872B2', skyMid: '#D3A78C', skyHor: '#F8D197', sun: '#FFE8B0', glow: '#FFD48E', sea: '#39598F', seaNear: '#5670A4', seaLine: '#F4D4A4', glitter: '#FFE2A2', isle: '#6A5A7C', isleFar: '#A98FA0', cloud: '#FBE0BE', cloudShade: '#C79A9C',
+    wall: '#F5DEC0', wallShade: '#B0879A', frame: '#F8E6CE', frameSide: '#CFAE9E', floor: '#C39E98', floorLine: '#AE8A85', lit: '#FFD99A', curtain: '#FCE7CE', curtainShade: '#D2AFA4', ink: '#FFF3E0', gold: '#F0AE56', lav: '#B39CC0', leaf: '#6B7C4E', leafShade: '#51603E', glass: '#E8CFC0', shadow: '#8C6E88' }],
+  [18.45, { skyTop: '#353A6A', skyMid: '#956B8E', skyHor: '#EE9467', sun: '#FFC27E', glow: '#FF9E66', sea: '#282E5C', seaNear: '#373B6A', seaLine: '#C48487', glitter: '#FFB874', isle: '#282944', isleFar: '#65507C', cloud: '#D08A86', cloudShade: '#6A5480',
+    wall: '#9A7B9C', wallShade: '#6A5480', frame: '#B5919F', frameSide: '#7D628E', floor: '#7C6490', floorLine: '#6A5480', lit: '#F2B682', curtain: '#D6A3A4', curtainShade: '#9A6C88', ink: '#FFE8D6', gold: '#F2B26A', lav: '#996E90', leaf: '#51533F', leafShade: '#3C3E34', glass: '#C9A0B4', shadow: '#3E2F5A' }],
+  [19.4, { skyTop: '#1B2356', skyMid: '#453B76', skyHor: '#94648A', sun: '#F6F1E1', glow: '#B77E9C', sea: '#171F4E', seaNear: '#222A5C', seaLine: '#7A6A9C', glitter: '#E6C8D4', isle: '#121633', isleFar: '#382E62', cloud: '#5B4A7E', cloudShade: '#3A3066',
+    wall: '#4E4A82', wallShade: '#3A3670', frame: '#615B94', frameSide: '#474279', floor: '#433F78', floorLine: '#39356C', lit: '#B592B8', curtain: '#766CA8', curtainShade: '#5A518E', ink: '#F2E6F2', gold: '#EFB468', lav: '#8D7FB8', leaf: '#343A48', leafShade: '#272D3C', glass: '#9C90C8', shadow: '#1E1A46' }],
+  [21.5, null]
+];
+KEYS[KEYS.length - 1][1] = KEYS[0][1];
+const KEY_LAB = KEYS.map(([h, p]) => [h, Object.fromEntries(ROLES.map(r => [r, rgbLab(hexRgb(p[r]))]))]);
+function palette(hour) {
+  const hh = ((hour % 24) + 24) % 24;
+  let i = KEYS.length - 2;
+  for (let k = 0; k < KEYS.length - 1; k++) if (hh >= KEYS[k][0] && hh < KEYS[k + 1][0]) { i = k; break; }
+  let a = KEY_LAB[i], b = KEY_LAB[i + 1], h0 = a[0], h1 = b[0];
+  if (hh >= KEYS[KEYS.length - 1][0]) { a = KEY_LAB[KEYS.length - 1]; b = KEY_LAB[1]; h0 = KEYS[KEYS.length - 1][0]; h1 = 24 + KEYS[1][0]; }   // 21.5 → 24+4.6 wraps through night
+  const hx = hh < h0 ? hh + 24 : hh;
+  const f = smooth(clamp((hx - h0) / (h1 - h0)));
+  const P = {};
+  for (const r of ROLES) P[r] = labRgb(a[1][r].map((v, j) => lerp(v, b[1][r][j], f)));
+  return P;
+}
+
+/* ------------------------------------------------------------------ *
+ *  The clock. Beats map to hours through a monotone spline: slow at
+ *  dawn, a held breath at noon, a long golden afternoon, a quick fall
+ *  of night. The day wraps: beat 48 is beat 0 of the next morning.
+ * ------------------------------------------------------------------ */
+const HOURS = [[0, 4.55], [4, 5.55], [6, 6.35], [8, 7.3], [11.6, 7.9], [14.6, 9.9], [15.5, 10.6], [16, 11.1], [22, 11.96], [23.6, 12.0], [24.4, 12.7], [27.2, 15.3], [31, 17.05], [33.5, 17.95], [35.6, 18.5], [37.2, 19.2], [40, 20.6], [46, 26.4], [48, 28.55]];
+const hourAt = (() => {
+  const xs = HOURS.map(k => k[0]), ys = HOURS.map(k => k[1]), n = xs.length;
+  const d = [];
+  for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+  const dPrev = (ys[n - 1] - ys[n - 2]) / (xs[n - 1] - xs[n - 2]);          // the loop continues past both ends
+  const m = new Array(n);
+  // Fritsch-Carlson with harmonic mean slopes (monotone, no overshoot through the noon hold)
+  for (let i = 0; i < n; i++) {
+    const a = i === 0 ? dPrev : d[i - 1], b = i === n - 1 ? d[0] : d[i];
+    m[i] = a * b <= 0 ? 0 : 2 * a * b / (a + b);
+  }
+  return b => {
+    const bb = wrapB(b);
+    let i = 0; while (i < n - 2 && bb >= xs[i + 1]) i++;
+    const hgt = xs[i + 1] - xs[i], t = (bb - xs[i]) / hgt, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * hgt * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * hgt * m[i + 1];
+  };
+})();
+
+// the sun rises to the left of the window and sets to the right
+const SUNRISE = 6.0, SUNSET = 18.45, MOONRISE = 19.6, MOONSET = 29.9;
+function skyDir(az, el) { return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)]; }
+function sunAt(hour) {
+  const th = Math.PI * (hour - SUNRISE) / (SUNSET - SUNRISE);
+  const az = -30 * D2R * Math.cos(th), el = 60 * D2R * Math.sin(th);
+  return { dir: skyDir(az, el), el, az, up: clamp(Math.sin(th) * 6 + .2) };
+}
+function moonAt(hour) {
+  const hh = hour < 12 ? hour + 24 : hour;
+  const th = Math.PI * (hh - MOONRISE) / (MOONSET - MOONRISE);
+  const az = -32 * D2R * Math.cos(th), el = 30 * D2R * Math.sin(th);
+  return { dir: skyDir(az, el), el, az, up: clamp(Math.sin(th) * 6 + .2) };
+}
+const nightness = hour => { const hh = ((hour % 24) + 24) % 24; return hh < 12 ? 1 - smooth(prog(4.4, 6.0, hh)) : smooth(prog(18.4, 19.8, hh)); };
+
+/* ------------------------------------------------------------------ *
+ *  3D: a pinhole camera, near-plane clipping and a few flat-shaded
+ *  primitives. World units are centimetres; y is up, +z looks out of
+ *  the window towards the sea.
+ * ------------------------------------------------------------------ */
+const NEAR = 4;
+function makeCam(pos, yaw, pitch, roll, f) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+  const cam = {
+    pos, yaw, pitch, roll, f,
+    toCam(p) {
+      const x = p[0] - pos[0], y = p[1] - pos[1], z = p[2] - pos[2];
+      const x1 = cy * x - sy * z, z1 = sy * x + cy * z;
+      const y2 = cp * y - sp * z1, z2 = sp * y + cp * z1;
+      return [cr * x1 + sr * y2, -sr * x1 + cr * y2, z2];
+    },
+    proj(q) { return [W / 2 + f * q[0] / q[2], H / 2 - f * q[1] / q[2]]; },
+    dirToCam(d) {                                // a direction, no translation
+      const x1 = cy * d[0] - sy * d[2], z1 = sy * d[0] + cy * d[2];
+      const y2 = cp * d[1] - sp * z1, z2 = sp * d[1] + cp * z1;
+      return [cr * x1 + sr * y2, -sr * x1 + cr * y2, z2];
+    }
+  };
+  return cam;
+}
+function clipNear(poly) {
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ina = a[2] > NEAR, inb = b[2] > NEAR;
+    if (ina) out.push(a);
+    if (ina !== inb) { const t = (NEAR - a[2]) / (b[2] - a[2]); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, NEAR]); }
+  }
+  return out;
+}
+function screenPoly(cam, pts) {
+  const q = clipNear(pts.map(p => cam.toCam(p)));
+  return q.length < 3 ? null : q.map(p => cam.proj(p));
+}
+function pathPoly(c, sp) { c.moveTo(sp[0][0], sp[0][1]); for (let i = 1; i < sp.length; i++) c.lineTo(sp[i][0], sp[i][1]); c.closePath(); }
+function fill3(c, cam, pts, col, a = 1) {
+  const sp = screenPoly(cam, pts); if (!sp) return null;
+  c.fillStyle = typeof col === 'string' ? col : css(col, a); c.beginPath(); pathPoly(c, sp); c.fill();
+  return sp;
+}
+function line3(c, cam, a, b, col, w, alpha = 1) {
+  let p = cam.toCam(a), q = cam.toCam(b);
+  if (p[2] <= NEAR && q[2] <= NEAR) return;
+  if (p[2] <= NEAR) { const t = (NEAR - p[2]) / (q[2] - p[2]); p = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, NEAR]; }
+  if (q[2] <= NEAR) { const t = (NEAR - q[2]) / (p[2] - q[2]); q = [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t, NEAR]; }
+  const A = cam.proj(p), B = cam.proj(q);
+  c.strokeStyle = typeof col === 'string' ? col : css(col, alpha); c.lineWidth = w;
+  c.beginPath(); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); c.stroke();
+}
+const circle3 = (ctr, u, v, r, n = 40) => Array.from({ length: n }, (_, i) => { const a = i / n * TAU; return [ctr[0] + (u[0] * Math.cos(a) + v[0] * Math.sin(a)) * r, ctr[1] + (u[1] * Math.cos(a) + v[1] * Math.sin(a)) * r, ctr[2] + (u[2] * Math.cos(a) + v[2] * Math.sin(a)) * r]; });
+// an axis-aligned box: faces facing the camera, shaded front / side / top
+function box(c, cam, x0, x1, y0, y1, z0, z1, cFront, cSide, cTop) {
+  const P = cam.pos;
+  const faces = [];
+  if (P[2] < z0) faces.push([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], cFront]);
+  if (P[2] > z1) faces.push([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], cFront]);
+  if (P[0] < x0) faces.push([[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1], cSide]);
+  if (P[0] > x1) faces.push([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], cSide]);
+  if (P[1] > y1) faces.push([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], cTop || cSide]);
+  if (P[1] < y0) faces.push([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], cSide]);
+  for (const f of faces) fill3(c, cam, f.slice(0, 4), f[4]);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Offscreen buffers and the paper grain
+ * ------------------------------------------------------------------ */
+const main = document.getElementById('c');
+const mctx = main.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const SUB = mk(), LIGHT = mk(W / 2, H / 2), FX = mk();
+const GRAIN = Array.from({ length: 4 }, (_, k) => {
+  const c = mk(384, 384), x = c.getContext('2d'), img = x.createImageData(384, 384), r = rng(90 + k);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 128 + (r() + r() + r() - 1.5) * 70; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  x.putImageData(img, 0, 0); return c;
+});
+const PAPER = (() => {                             // low-frequency mottling, like printed stock
+  const c = mk(W / 8, H / 8), x = c.getContext('2d'), r = rng(7);
+  const img = x.createImageData(c.width, c.height);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 128 + (r() - .5) * 40; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  x.putImageData(img, 0, 0);
+  const big = mk(), bx = big.getContext('2d'); bx.imageSmoothingEnabled = true; bx.filter = 'blur(6px)'; bx.drawImage(c, 0, 0, W, H);
+  return big;
+})();
+
+/* ------------------------------------------------------------------ *
+ *  Sky and sea. Everything out of the window is "at infinity": it is
+ *  laid out on a tangent plane (X = right, Y = up, one unit = 45°) and
+ *  only turns with the camera, it never slides with it.
+ * ------------------------------------------------------------------ */
+const skyPt = (cam, X, Y) => { const q = cam.dirToCam([X, Y, 1]); return q[2] > .05 ? cam.proj(q) : [NaN, NaN]; };
+const dirTan = d => [d[0] / d[2], d[1] / d[2]];
+const CLOUDS = Array.from({ length: 9 }, (_, i) => {
+  const r = rng(300 + i);
+  return { x0: r() * 7 - 3.5, y: .07 + r() * .34, s: .7 + r() * .6, rows: Array.from({ length: 2 + (r() * 2 | 0) }, () => [(r() - .35) * 90, 120 + r() * 220]) };
+});
+const STARS = Array.from({ length: 240 }, (_, i) => {
+  const r = rng(700 + i);
+  return { x: r() * 5 - 2.5, y: .02 + Math.pow(r(), .8) * 1.15, s: Math.pow(r(), 3) * 3 + .6, tw: r(), big: i < 14 };
+});
+// four constellations: indices into STARS, drawn as thin lines at night
+const POLE = [-.55, .62];
+// constellations: short chains of near neighbours among the brighter stars
+const CONST = [[-.9, .55], [.1, .75], [.75, .42], [-.2, .3]].map(([cx, cy], k) => {
+  const pool = STARS.map((s, i) => [i, Math.hypot(s.x - cx, s.y - cy)]).filter(([i, d]) => STARS[i].s > .9 && d < .3).sort((p, q) => p[1] - q[1]).slice(0, 5 + k % 2);
+  const chain = [pool[0][0]], left = pool.slice(1).map(p => p[0]);
+  while (left.length) {
+    const last = STARS[chain[chain.length - 1]];
+    let bi = 0; for (let j = 1; j < left.length; j++) if (Math.hypot(STARS[left[j]].x - last.x, STARS[left[j]].y - last.y) < Math.hypot(STARS[left[bi]].x - last.x, STARS[left[bi]].y - last.y)) bi = j;
+    chain.push(left.splice(bi, 1)[0]);
+  }
+  return chain;
+});
+function starRot(b) { return (wrapB(b - 34)) * .012; }        // resets at beat 34, when no star is out
+
+function horizonLine(cam) {                           // screen points of the horizon and the "up" direction
+  const A = skyPt(cam, Math.tan(cam.yaw - 1.1), 0), B = skyPt(cam, Math.tan(cam.yaw + 1.1), 0);
+  const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy);
+  return { A, B, n: [dy / l, -dx / l] };
+}
+function drawSky(c, cam, P, hour, t, b, fx) {
+  const hz = horizonLine(cam), cx0 = Math.tan(cam.yaw), o = skyPt(cam, cx0, 0);
+  const pMid = skyPt(cam, cx0, .28), pTop = skyPt(cam, cx0, 1.0);
+  const g = c.createLinearGradient(o[0], o[1], pTop[0], pTop[1]);
+  const kMid = Math.hypot(pMid[0] - o[0], pMid[1] - o[1]) / Math.hypot(pTop[0] - o[0], pTop[1] - o[1]);
+  g.addColorStop(0, css(P.skyHor)); g.addColorStop(clamp(kMid, .05, .9), css(P.skyMid)); g.addColorStop(1, css(P.skyTop));
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  const f = cam.f / 1100;
+
+  // stars, turning slowly round the pole; long-exposure trails when fx.trail > 0
+  const night = nightness(hour);
+  if (night > .01) {
+    const rot = starRot(b), cr = Math.cos(rot), sr = Math.sin(rot);
+    const at = (s, ang) => { const dx = s.x - POLE[0], dy = s.y - POLE[1], ca = Math.cos(ang), sa = Math.sin(ang); return [POLE[0] + dx * ca - dy * sa, POLE[1] + dx * sa + dy * ca]; };
+    c.fillStyle = css(P.ink);
+    for (let i = 0; i < STARS.length; i++) {
+      const s = STARS[i], [X, Y] = at(s, rot);
+      if (Y < .005) continue;
+      const tw = .55 + .45 * Math.sin(TAU * (cyc(t, 7 + (i % 5)) + s.tw));
+      const on = clamp((night - s.tw * .6) / .12), popS = on < 1 ? outBack(on, 3) : 1;
+      const a = clamp(on * 1.5) * clamp(Y * 12) * (s.big ? 1 : tw * .85);
+      if (a <= .01) continue;
+      const p = skyPt(cam, X, Y);
+      if (p[0] < -40 || p[0] > W + 40 || p[1] < -40 || p[1] > H + 40) continue;
+      if (fx.trail > 0) {                             // long exposure: an arc round the pole, fading along its tail
+        const n = 12, sweep = fx.trail * .55;
+        c.lineWidth = Math.max(1, s.s * .6 * f); c.lineCap = 'round';
+        let prev = p;
+        for (let k = 1; k <= n; k++) {
+          const [x, y] = at(s, rot - sweep * k / n), q = skyPt(cam, x, y);
+          c.strokeStyle = css(P.ink, a * .85 * (1 - k / (n + 1)));
+          c.beginPath(); c.moveTo(prev[0], prev[1]); c.lineTo(q[0], q[1]); c.stroke(); prev = q;
+        }
+      }
+      c.globalAlpha = a;
+      if (s.big) {                                    // four-point glints for the brightest
+        const r = (5 + 5 * tw) * f * popS;
+        c.beginPath(); c.moveTo(p[0], p[1] - r); c.quadraticCurveTo(p[0], p[1], p[0] + r, p[1]); c.quadraticCurveTo(p[0], p[1], p[0], p[1] + r);
+        c.quadraticCurveTo(p[0], p[1], p[0] - r, p[1]); c.quadraticCurveTo(p[0], p[1], p[0], p[1] - r); c.fill();
+      } else { c.beginPath(); c.arc(p[0], p[1], s.s * f * popS, 0, TAU); c.fill(); }
+    }
+    c.globalAlpha = 1;
+    if (fx.chart > 0) {                               // a star chart round the pole: dotted rings and a ticked rim
+      const pc = skyPt(cam, POLE[0], POLE[1]), unit = Math.hypot(...[0, 1].map(i => skyPt(cam, POLE[0] + .1, POLE[1])[i] - pc[i])) * 10;
+      c.save(); c.translate(pc[0], pc[1]); c.rotate(-rot);
+      c.strokeStyle = css(P.ink, .32 * fx.chart * night); c.lineWidth = 1.3 * f;
+      [.18, .34, .5, .68, .9].forEach((r, k) => {
+        const d = clamp(fx.chart * 1.4 - k * .08);
+        c.setLineDash(k % 2 ? [2 * f, 7 * f] : [10 * f, 8 * f]);
+        c.beginPath(); c.arc(0, 0, r * unit, -Math.PI / 2, -Math.PI / 2 + TAU * d); c.stroke();
+      });
+      c.setLineDash([]);
+      for (let k = 0; k < 72; k++) {
+        const d = clamp(fx.chart * 1.3 - .15); if (k / 72 > d) break;
+        const a = k / 72 * TAU - Math.PI / 2, r0 = .9 * unit, r1 = r0 + (k % 6 ? 8 : 20) * f;
+        c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); c.stroke();
+      }
+      c.fillStyle = css(P.ink, .6 * fx.chart * night); c.beginPath(); c.arc(0, 0, 4 * f, 0, TAU); c.fill();
+      c.restore();
+    }
+    if (fx.constellations > 0) {                      // lines drawn star to star, with a ring on every star
+      c.strokeStyle = css(P.ink, .65 * night); c.lineWidth = 1.6 * f; c.setLineDash([]);
+      CONST.forEach((idx, k) => {
+        const pr = clamp(fx.constellations * 1.6 - k * .2);
+        if (pr <= 0) return;
+        const pts = idx.map(i => { const [x, y] = at(STARS[i], rot); return skyPt(cam, x, y); });
+        const segs = (pts.length - 1) * pr;
+        c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) {
+          const q = clamp(segs - (j - 1)); if (q <= 0) break;
+          c.lineTo(lerp(pts[j - 1][0], pts[j][0], q), lerp(pts[j - 1][1], pts[j][1], q));
+        }
+        c.stroke();
+        c.lineWidth = 1.2 * f;
+        pts.forEach((q, j) => { if (j <= segs + .01) { c.beginPath(); c.arc(q[0], q[1], 7 * f, 0, TAU); c.stroke(); } });
+        c.lineWidth = 1.6 * f;
+      });
+      c.setLineDash([]);
+    }
+  }
+
+  // a shooting star at beat 42.6
+  const ss = prog(42.6, 43.4, wrapB(b));
+  if (ss > 0 && ss < 1) {
+    const e = outCubic(ss), X0 = .9, Y0 = .62, X1 = -.3, Y1 = .38;
+    const hx = lerp(X0, X1, e), hy = lerp(Y0, Y1, e), tx = lerp(X0, X1, Math.max(0, e - .25)), ty = lerp(Y0, Y1, Math.max(0, e - .25));
+    const ph = skyPt(cam, hx, hy), pt = skyPt(cam, tx, ty), gg = c.createLinearGradient(pt[0], pt[1], ph[0], ph[1]);
+    gg.addColorStop(0, css(P.ink, 0)); gg.addColorStop(1, css(P.ink, .95 * Math.sin(Math.PI * ss)));
+    c.strokeStyle = gg; c.lineWidth = 3 * f; c.lineCap = 'round'; c.beginPath(); c.moveTo(pt[0], pt[1]); c.lineTo(ph[0], ph[1]); c.stroke();
+    c.fillStyle = css(P.ink, Math.sin(Math.PI * ss)); star4(c, ph[0], ph[1], 12 * f, ss * 2);
+  }
+
+  // the moon: a flat disc with flat craters and a soft halo
+  const moon = moonAt(hour);
+  if (moon.dir[2] > .05 && moon.el > -.2) {
+    const [X, Y] = dirTan(moon.dir), p = skyPt(cam, X, Y), r = 58 * f;
+    const halo = c.createRadialGradient(p[0], p[1], r * .8, p[0], p[1], r * 5);
+    halo.addColorStop(0, css(P.glow, .35 * night)); halo.addColorStop(1, css(P.glow, 0));
+    c.fillStyle = halo; c.fillRect(p[0] - r * 5, p[1] - r * 5, r * 10, r * 10);
+    c.globalAlpha = clamp(.25 + night);
+    c.fillStyle = css(P.sun); c.beginPath(); c.arc(p[0], p[1], r, 0, TAU); c.fill();
+    c.fillStyle = css(mixRgb(P.sun, P.lav, .28));
+    for (const [dx, dy, rr] of [[-.32, -.18, .22], [.28, .1, .16], [-.05, .38, .12], [.36, -.34, .09], [-.42, .3, .08]]) { c.beginPath(); c.arc(p[0] + dx * r, p[1] + dy * r, rr * r, 0, TAU); c.fill(); }
+    c.globalAlpha = 1;
+    if (fx.moonRing > 0 && fx.moonRing < 1) {
+      c.strokeStyle = css(P.ink, (1 - fx.moonRing) * .8); c.lineWidth = 2 * f;
+      c.beginPath(); c.arc(p[0], p[1], r * (1.3 + 2.4 * outCubic(fx.moonRing)), 0, TAU); c.stroke();
+    }
+  }
+
+  // the sun: glow, rays and rings for the big moments, retro stripes near the horizon
+  const sun = sunAt(hour);
+  if (sun.dir[2] > .05 && sun.el > -.12) {
+    const [X, Y] = dirTan(sun.dir), p = skyPt(cam, X, Y), r = (78 + 26 * (1 - clamp(sun.el / (20 * D2R)))) * f;
+    const glow = c.createRadialGradient(p[0], p[1], r * .6, p[0], p[1], r * 7);
+    glow.addColorStop(0, css(P.glow, .55)); glow.addColorStop(.4, css(P.glow, .16)); glow.addColorStop(1, css(P.glow, 0));
+    c.fillStyle = glow; c.fillRect(p[0] - r * 7, p[1] - r * 7, r * 14, r * 14);
+    if (fx.rays > 0) {
+      const n = 44;
+      c.strokeStyle = css(P.ink, .75 * (1 - clamp((fx.rays - .7) / .3))); c.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU + fx.raysRot, len = (i % 2 ? .55 : 1) * outExpo(clamp(fx.rays * 1.4 - hash(i) * .3));
+        if (len <= 0) continue;
+        const r0 = r * 1.35, r1 = r0 + r * 2.6 * len;
+        c.lineWidth = (i % 2 ? 1.6 : 3) * f;
+        c.beginPath(); c.moveTo(p[0] + Math.cos(a) * r0, p[1] + Math.sin(a) * r0); c.lineTo(p[0] + Math.cos(a) * r1, p[1] + Math.sin(a) * r1); c.stroke();
+      }
+    }
+    for (const ring of fx.rings || []) {
+      if (ring <= 0 || ring >= 1) continue;
+      c.strokeStyle = css(P.ink, (1 - ring) * .9); c.lineWidth = (6 * (1 - ring) + 1.5) * f;
+      c.beginPath(); c.arc(p[0], p[1], r * (1.2 + 5 * outCubic(ring)), 0, TAU); c.stroke();
+    }
+    // disc on its own layer so the stripes can be cut out of it
+    const stripe = 1 - clamp(sun.el / (9 * D2R));
+    const fc = FX.getContext('2d');
+    fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(p[0] - r - 4, p[1] - r - 4, 2 * r + 8, 2 * r + 8);
+    fc.fillStyle = css(P.sun); fc.beginPath(); fc.arc(p[0], p[1], r, 0, TAU); fc.fill();
+    if (stripe > 0) {
+      fc.globalCompositeOperation = 'destination-out';
+      const off = cyc(t, 12) * .2;
+      for (let k = 0; k < 6; k++) {
+        const y = (k + off) / 6, th = (.02 + .07 * y) * stripe;
+        fc.fillRect(p[0] - r - 2, p[1] + y * r - th * r, 2 * r + 4, th * r * 2);
+      }
+      fc.globalCompositeOperation = 'source-over';
+    }
+    c.drawImage(FX, p[0] - r - 4, p[1] - r - 4, 2 * r + 8, 2 * r + 8, p[0] - r - 4, p[1] - r - 4, 2 * r + 8, 2 * r + 8);
+  }
+
+  // clouds: stacked pills, lit on top, drifting downwind
+  for (const cl of CLOUDS) {
+    const X = ((cl.x0 + 3.5 + cyc(t, 1) * 7) % 7) - 3.5;
+    const p = skyPt(cam, X, cl.y); if (p[0] < -600 || p[0] > W + 600) continue;
+    const s = cl.s * f * (.6 + cl.y);
+    cl.rows.forEach(([ox, len], k) => {
+      const x = p[0] + ox * s, y = p[1] + k * 26 * s, th = 22 * s, l = len * s;
+      c.fillStyle = css(P.cloudShade); c.beginPath(); c.roundRect(x + 6 * s, y + th * .45, l, th, th / 2); c.fill();
+      c.fillStyle = css(P.cloud); c.beginPath(); c.roundRect(x, y, l, th, th / 2); c.fill();
+    });
+  }
+  return hz;
+}
+
+// the far shore on the right, with a lighthouse that sweeps at night
+function isleY(X, far) { return far ? .012 + .035 * Math.max(0, Math.sin((X - .75) * 2.1)) + .012 * Math.sin(X * 9) : .006 + .03 * Math.max(0, Math.sin((X - 1.05) * 3.4)) + .008 * Math.sin(X * 17); }
+function drawSea(c, cam, P, hour, t, b, hz) {
+  const f = cam.f / 1100, night = nightness(hour);
+  for (const far of [true, false]) {
+    const x0 = far ? .75 : 1.05, x1 = far ? 2.25 : 1.97;
+    c.fillStyle = css(far ? P.isleFar : P.isle); c.beginPath();
+    for (let k = 0; k <= 60; k++) { const X = lerp(x0, x1, k / 60), q = skyPt(cam, X, Math.max(0, isleY(X, far))); if (k) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); }
+    const e = skyPt(cam, x1, -.002), s = skyPt(cam, x0, -.002); c.lineTo(e[0], e[1]); c.lineTo(s[0], s[1]); c.closePath(); c.fill();
+  }
+  // lighthouse
+  const LX = 1.62, ly = isleY(LX, false), base = skyPt(cam, LX, ly), top = skyPt(cam, LX, ly + .03);
+  c.strokeStyle = css(P.isle); c.lineWidth = 6 * f; c.beginPath(); c.moveTo(base[0], base[1]); c.lineTo(top[0], top[1]); c.stroke();
+  const blink = .5 + .5 * Math.sin(TAU * cyc(t, 12));
+  c.fillStyle = css(mixRgb(P.gold, P.ink, .4), .4 + .6 * night * blink); c.beginPath(); c.arc(top[0], top[1], 4 * f, 0, TAU); c.fill();
+  if (night > .05) {
+    const a = osc(t, 6) * .9, len = 900 * f;
+    const g = c.createRadialGradient(top[0], top[1], 0, top[0], top[1], len);
+    g.addColorStop(0, css(P.gold, .45 * night)); g.addColorStop(1, css(P.gold, 0));
+    c.fillStyle = g; c.beginPath(); c.moveTo(top[0], top[1]);
+    c.lineTo(top[0] + Math.cos(Math.PI + a - .06) * len, top[1] + Math.sin(a - .06) * len * .12);
+    c.lineTo(top[0] + Math.cos(Math.PI + a + .06) * len, top[1] + Math.sin(a + .06) * len * .12); c.closePath(); c.fill();
+  }
+
+  // the water, from the horizon down
+  const o = skyPt(cam, Math.tan(cam.yaw), 0), dn = skyPt(cam, Math.tan(cam.yaw), -.6);
+  const g = c.createLinearGradient(o[0], o[1], dn[0], dn[1]);
+  g.addColorStop(0, css(P.sea)); g.addColorStop(1, css(P.seaNear));
+  c.fillStyle = g; c.beginPath();
+  const n = hz.n, far = 4000;
+  c.moveTo(hz.A[0] - n[0] * 2, hz.A[1] - n[1] * 2); c.lineTo(hz.B[0] - n[0] * 2, hz.B[1] - n[1] * 2);
+  c.lineTo(hz.B[0] - n[0] * far, hz.B[1] - n[1] * far); c.lineTo(hz.A[0] - n[0] * far, hz.A[1] - n[1] * far); c.closePath(); c.fill();
+
+  // wave rows in perspective: rows ride towards the viewer, 60 rows per loop
+  const sun = sunAt(hour), moon = moonAt(hour);
+  const src = sun.el > -.05 ? sun : moon.el > -.05 ? moon : null;
+  const sx = src && src.dir[2] > .05 ? dirTan(src.dir)[0] : null;
+  const srcA = src === sun ? clamp(sun.up) : clamp(moon.up) * night;
+  const u = cyc(t, 1) * 60;
+  for (let i = 1; i < 70; i++) {
+    const s = i - frac(u), id = ((i + Math.floor(u)) % 60 + 60) % 60;
+    if (s < .6) continue;
+    const alpha = .95 / Math.pow(s, 1.08);            // tan angle below the horizon
+    const th = Math.max(1, alpha * 30 * f);
+    const near = clamp(alpha * 3);
+    c.fillStyle = css(P.seaLine, .18 + .5 * near);
+    for (let k = 0; k < 5; k++) {
+      const X = -2.6 + 5.2 * hash(id * 7.1 + k * 3.3) + .12 * osc(t, 2, id * .07), len = (.15 + .5 * hash(id + k * 11)) * (.15 + alpha * 1.4);
+      const a = skyPt(cam, X, -alpha), bb = skyPt(cam, X + len, -alpha);
+      c.beginPath(); c.roundRect(Math.min(a[0], bb[0]), a[1] - th / 2, Math.abs(bb[0] - a[0]), th, th / 2); c.fill();
+    }
+    if (sx !== null && srcA > .02) {                  // glitter path under the sun or moon
+      const spread = .05 + alpha * .55;
+      c.fillStyle = css(P.glitter, srcA);
+      for (let k = 0; k < 4; k++) {
+        const on = hash(id * 13.7 + k * 5.1 + Math.floor(cyc(t, 90) * 90) * .173);
+        if (on < .35) continue;
+        const X = sx + (hash(id * 3.1 + k) - .5) * 2 * spread, len = (.02 + .1 * on) * (.2 + alpha * 1.6);
+        const a = skyPt(cam, X - len / 2, -alpha), bb = skyPt(cam, X + len / 2, -alpha);
+        c.beginPath(); c.roundRect(a[0], a[1] - th * .6, Math.max(2, bb[0] - a[0]), th * 1.2, th * .6); c.fill();
+      }
+    }
+  }
+  // horizon: a thin bright line
+  c.strokeStyle = css(P.ink, .45); c.lineWidth = 1.5 * f;
+  c.beginPath(); c.moveTo(hz.A[0], hz.A[1]); c.lineTo(hz.B[0], hz.B[1]); c.stroke();
+}
+
+// birds: small chevrons in loose flocks
+function drawBirds(c, cam, P, t, flock, prog01) {
+  if (prog01 <= 0 || prog01 >= 1) return;
+  const f = cam.f / 1100;
+  c.strokeStyle = css(flock.col || P.ink); c.lineCap = 'round'; c.lineJoin = 'round';
+  flock.birds.forEach((bd, i) => {
+    const q = clamp(prog01 * 1.15 - bd.d); if (q <= 0 || q >= 1) return;
+    const X = lerp(flock.x0, flock.x1, q) + bd.dx, Y = lerp(flock.y0, flock.y1, q) + bd.dy + .01 * Math.sin(q * 9 + i);
+    const p = skyPt(cam, X, Y), s = bd.s * f, a = .25 + .55 * Math.abs(Math.sin(TAU * (q * 7 + bd.ph)));
+    c.lineWidth = Math.max(1.6, s * .18);
+    c.beginPath(); c.moveTo(p[0] - s, p[1] - s * a); c.quadraticCurveTo(p[0] - s * .4, p[1] - s * a * .2, p[0], p[1]);
+    c.quadraticCurveTo(p[0] + s * .4, p[1] - s * a * .2, p[0] + s, p[1] - s * a); c.stroke();
+  });
+}
+const flockOf = (seed, n, x0, y0, x1, y1) => { const r = rng(seed); return { x0, y0, x1, y1, birds: Array.from({ length: n }, () => ({ dx: (r() - .5) * .25, dy: (r() - .5) * .1, d: r() * .15, s: 8 + r() * 9, ph: r() })) }; };
+
+/* ------------------------------------------------------------------ *
+ *  Wind: a breeze with three gusts per loop (periodic, so the curtains
+ *  and the hanging glass land where they started)
+ * ------------------------------------------------------------------ */
+const bdist = (b, c) => ((b - c + BEATS * 1.5) % BEATS) - BEATS / 2;
+const gust = (b, c, w) => Math.exp(-Math.pow(bdist(b, c) / w, 2));
+const windAt = b => .22 + .06 * Math.sin(TAU * b / 12) + .9 * gust(b, 10.4, 1.3) + .55 * gust(b, 27, 1.8) + .35 * gust(b, 44, 2);
+
+/* ------------------------------------------------------------------ *
+ *  The room
+ * ------------------------------------------------------------------ */
+const RM = { wx: 780, depth: 1700, ceil: 440, hx: 560, hy0: 36, hy1: 408, reveal: 40 };
+const PANES = [[-542, -196], [-178, 178], [196, 542]], PY0 = 54, PY1 = 390, MULL = [-187, 187];
+const TABLE = [300, 62, -400], TABLE_R = 78;
+const ORBS = [[340, 262, -170, 26, 0], [396, 306, -128, 18, 1.3], [452, 246, -150, 21, 2.1]];
+const SUNCATCHER = [-390, 300, -44], SC_R = 58;
+const POUF = [-470, 0, -540], PLANT = [450, 0, -610], LANTERN = [-470, 36, -24];
+
+// rays through the window land on the floor along -S
+const onFloor = (p, S) => [p[0] - S[0] * p[1] / S[1], 0, p[2] - S[2] * p[1] / S[1]];
+function clipXZ(poly, x0, x1, z0, z1) {                  // Sutherland-Hodgman against the floor rectangle
+  const edges = [[0, x0, 1], [0, x1, -1], [2, z0, 1], [2, z1, -1]];
+  let out = poly;
+  for (const [ax, v, sgn] of edges) {
+    const inp = out; out = [];
+    for (let i = 0; i < inp.length; i++) {
+      const a = inp[i], b = inp[(i + 1) % inp.length], ia = (a[ax] - v) * sgn >= 0, ib = (b[ax] - v) * sgn >= 0;
+      if (ia) out.push(a);
+      if (ia !== ib) { const tt = (v - a[ax]) / (b[ax] - a[ax]); out.push([a[0] + (b[0] - a[0]) * tt, 0, a[2] + (b[2] - a[2]) * tt]); }
+    }
+    if (!out.length) return out;
+  }
+  return out;
+}
+function perpBasis(S) {                                 // two unit vectors perpendicular to S
+  const u = Math.abs(S[1]) < .9 ? [S[2], 0, -S[0]] : [1, 0, 0];
+  const lu = Math.hypot(...u); u[0] /= lu; u[1] /= lu; u[2] /= lu;
+  const v = [S[1] * u[2] - S[2] * u[1], S[2] * u[0] - S[0] * u[2], S[0] * u[1] - S[1] * u[0]];
+  return [u, v];
+}
+function orbPos(i, b, t) {
+  const [x, y, z, r, ph] = ORBS[i], len = RM.ceil - y, w = windAt(b);
+  const ax = (.05 + .16 * w) * Math.sin(TAU * cyc(t, 17 + i * 2, ph * .1)), az = (.03 + .1 * w) * Math.sin(TAU * cyc(t, 13 + i, ph * .2 + .3));
+  return [x + Math.sin(ax) * len, RM.ceil - Math.cos(ax) * Math.cos(az) * len, z + Math.sin(az) * len - w * 18];
+}
+const scAngle = (b, t) => TAU * cyc(t, 3) + 1.6 * Math.sin(TAU * b / 48 * 2) + 2.4 * gust(b, 10.4, 1.6);
+function scLocal(k) {                                   // the nautilus: a log spiral split into glass chambers
+  const out = [];
+  for (let j = 0; j <= 6; j++) { const th = (k + j / 6) * .62, r = SC_R * .86 * Math.exp(-.2 * (11 - k - j / 6) * .62 * 1.4); out.push([Math.cos(th + 2) * r, Math.sin(th + 2) * r]); }
+  return out;
+}
+
+function drawRoom(c, cam, P, hour, t, b) {
+  const sun = sunAt(hour), moon = moonAt(hour), night = nightness(hour);
+  const f = cam.f / 1100, w = windAt(b);
+  // light through the window: the sun by day, a pale moon at night
+  let S = null, Ik = 0, litCol = P.lit;
+  if (sun.el > .02 && sun.dir[2] > .05) { S = sun.dir; Ik = clamp(sun.up) * (1 - night) * clamp(sun.el / (4 * D2R)); }
+  else if (moon.el > .02 && moon.dir[2] > .05) { S = moon.dir; Ik = clamp(moon.up) * night * .55; litCol = mixRgb(P.lit, P.ink, .2); }
+  if (S && S[1] < .04) S = null;
+
+  // wall with the window cut out
+  const wall = screenPoly(cam, [[-RM.wx, 0, 0], [RM.wx, 0, 0], [RM.wx, RM.ceil, 0], [-RM.wx, RM.ceil, 0]]);
+  const hole = screenPoly(cam, [[-RM.hx, RM.hy0, 0], [-RM.hx, RM.hy1, 0], [RM.hx, RM.hy1, 0], [RM.hx, RM.hy0, 0]]);
+  if (wall) {
+    c.fillStyle = css(P.wall); c.beginPath(); pathPoly(c, wall); if (hole) pathPoly(c, hole); c.fill('evenodd');
+    const wc = cam.toCam([0, 200, 0]);
+    if (wc[2] > NEAR) {
+      const p = cam.proj(wc), rr = cam.f * 900 / wc[2], g = c.createRadialGradient(p[0], p[1], rr * .2, p[0], p[1], rr);
+      g.addColorStop(0, css(P.lit, .35 * (1 - night * .6))); g.addColorStop(1, css(P.lit, 0));
+      c.save(); c.globalCompositeOperation = 'screen'; c.fillStyle = g; c.beginPath(); pathPoly(c, wall); if (hole) pathPoly(c, hole); c.fill('evenodd'); c.restore();
+    }
+  }
+  // depth of the opening
+  const R = RM.reveal;
+  fill3(c, cam, [[-RM.hx, RM.hy0, 0], [-RM.hx, RM.hy1, 0], [-RM.hx, RM.hy1, R], [-RM.hx, RM.hy0, R]], P.frameSide);
+  fill3(c, cam, [[RM.hx, RM.hy0, 0], [RM.hx, RM.hy1, 0], [RM.hx, RM.hy1, R], [RM.hx, RM.hy0, R]], P.frameSide);
+  fill3(c, cam, [[-RM.hx, RM.hy1, 0], [RM.hx, RM.hy1, 0], [RM.hx, RM.hy1, R], [-RM.hx, RM.hy1, R]], mixRgb(P.frameSide, P.shadow, .25));
+  fill3(c, cam, [[-RM.hx, RM.hy0, 0], [RM.hx, RM.hy0, 0], [RM.hx, RM.hy0, R], [-RM.hx, RM.hy0, R]], P.frame);
+  // ceiling, side walls, floor
+  fill3(c, cam, [[-RM.wx, RM.ceil, 0], [RM.wx, RM.ceil, 0], [RM.wx, RM.ceil, -RM.depth], [-RM.wx, RM.ceil, -RM.depth]], mixRgb(P.wallShade, P.lav, .25));
+  fill3(c, cam, [[-RM.wx, 0, 0], [-RM.wx, RM.ceil, 0], [-RM.wx, RM.ceil, -RM.depth], [-RM.wx, 0, -RM.depth]], P.wallShade);
+  fill3(c, cam, [[RM.wx, 0, 0], [RM.wx, RM.ceil, 0], [RM.wx, RM.ceil, -RM.depth], [RM.wx, 0, -RM.depth]], P.wallShade);
+  fill3(c, cam, [[-RM.wx, 0, 0], [RM.wx, 0, 0], [RM.wx, 0, -RM.depth], [-RM.wx, 0, -RM.depth]], P.floor);
+  for (let k = -9; k <= 9; k++) line3(c, cam, [k * 76, 0, 0], [k * 76, 0, -RM.depth], P.floorLine, 1.2 * f);
+  // a soft corner shadow where the floor meets the wall
+  const cs1 = screenPoly(cam, [[-RM.wx, 0, 0], [RM.wx, 0, 0], [RM.wx, 0, -140], [-RM.wx, 0, -140]]);
+  if (cs1) {
+    const a0 = cam.proj(cam.toCam([0, 0, 0])), a1 = cam.proj(cam.toCam([0, 0, -140]));
+    if (cam.toCam([0, 0, 0])[2] > NEAR && cam.toCam([0, 0, -140])[2] > NEAR) {
+      const g = c.createLinearGradient(a0[0], a0[1], a1[0], a1[1]); g.addColorStop(0, css(P.shadow, .22)); g.addColorStop(1, css(P.shadow, 0));
+      c.fillStyle = g; c.beginPath(); pathPoly(c, cs1); c.fill();
+    }
+  }
+  // window reflection on the glossy floor
+  for (const [x0, x1] of PANES) {
+    const q = screenPoly(cam, [[x0, 0, -4], [x1, 0, -4], [x1 - 20, 0, -260], [x0 + 20, 0, -260]]);
+    if (!q) continue;
+    const A = cam.toCam([0, 0, -4]), B = cam.toCam([0, 0, -260]);
+    if (A[2] <= NEAR || B[2] <= NEAR) continue;
+    const pa = cam.proj(A), pb = cam.proj(B), g = c.createLinearGradient(pa[0], pa[1], pb[0], pb[1]);
+    g.addColorStop(0, css(P.skyHor, .45)); g.addColorStop(1, css(P.skyHor, 0));
+    c.fillStyle = g; c.beginPath(); pathPoly(c, q); c.fill();
+  }
+  // rug: rings and a ring of dots
+  // the rug under the table doubles as the sundial's face (ticks every hour, gold at the quarters)
+  const RUG = [TABLE[0], .5, TABLE[2]];
+  [[185, mixRgb(P.lav, P.floor, .3)], [170, mixRgb(P.curtain, P.floor, .45)], [124, mixRgb(P.lav, P.curtain, .6)], [100, mixRgb(P.curtain, P.floor, .45)]].forEach(([r, col]) => fill3(c, cam, circle3(RUG, [1, 0, 0], [0, 0, 1], r, 60), col));
+  for (let k = 0; k < 24; k++) { const a = k / 24 * TAU - Math.PI / 2, big = k % 6 === 0; fill3(c, cam, [[RUG[0] + Math.cos(a - .012) * 132, .7, RUG[2] + Math.sin(a - .012) * 132], [RUG[0] + Math.cos(a + .012) * 132, .7, RUG[2] + Math.sin(a + .012) * 132], [RUG[0] + Math.cos(a + .008) * (big ? 164 : 154), .7, RUG[2] + Math.sin(a + .008) * (big ? 164 : 154)], [RUG[0] + Math.cos(a - .008) * (big ? 164 : 154), .7, RUG[2] + Math.sin(a - .008) * (big ? 164 : 154)]], big ? P.gold : mixRgb(P.lav, P.shadow, .2)); }
+
+  // sunlight on the floor (half resolution, soft edges), with the furniture's shadows cut out
+  if (S && Ik > .01) {
+    const lc = LIGHT.getContext('2d');
+    lc.setTransform(.5, 0, 0, .5, 0, 0); lc.globalCompositeOperation = 'source-over'; lc.clearRect(0, 0, W, H);
+    lc.fillStyle = '#fff';
+    for (const [x0, x1] of PANES) {
+      const quad = [[x0, PY0, 0], [x1, PY0, 0], [x1, PY1, 0], [x0, PY1, 0]].map(p => onFloor(p, S));
+      const cl = clipXZ(quad, -RM.wx, RM.wx, -RM.depth, 0);
+      if (cl.length > 2) { const sp = screenPoly(cam, cl); if (sp) { lc.beginPath(); pathPoly(lc, sp); lc.fill(); } }
+    }
+    lc.globalCompositeOperation = 'destination-out'; lc.fillStyle = '#000';
+    const shadowOf = pts => { const sp = screenPoly(cam, pts.map(p => onFloor(p, S))); if (sp) { lc.beginPath(); pathPoly(lc, sp); lc.fill(); } };
+    shadowOf(circle3(TABLE, [1, 0, 0], [0, 0, 1], TABLE_R, 36));
+    for (let k = 0; k < 3; k++) { const a = k / 3 * TAU + .5, x = TABLE[0] + Math.cos(a) * TABLE_R * .75, z = TABLE[2] + Math.sin(a) * TABLE_R * .75; shadowOf([[x - 3, TABLE[1], z], [x + 3, TABLE[1], z], [x + 3 * .4 + Math.cos(a) * 10, 0, z + Math.sin(a) * 10], [x - 3 * .4 + Math.cos(a) * 10, 0, z + Math.sin(a) * 10]]); }
+    shadowOf([[TABLE[0] - 16, TABLE[1], TABLE[2]], [TABLE[0] + 16, TABLE[1], TABLE[2]], [TABLE[0] + 20, TABLE[1] + 40, TABLE[2]], [TABLE[0] + 9, TABLE[1] + 62, TABLE[2]], [TABLE[0] - 9, TABLE[1] + 62, TABLE[2]], [TABLE[0] - 20, TABLE[1] + 40, TABLE[2]]]);
+    const [u, v] = perpBasis(S);
+    for (let i = 0; i < ORBS.length; i++) shadowOf(circle3(orbPos(i, b, t), u, v, ORBS[i][3], 20));
+    for (let k = 0; k < 7; k++) {                     // leaves of the plant
+      const a = -1.2 + k * .4 + .08 * Math.sin(TAU * cyc(t, 11, k * .13)) * (1 + w), l = 90 + 30 * hash(k);
+      const base = [PLANT[0], 70, PLANT[2]], tip = [PLANT[0] + Math.sin(a) * l, 70 + Math.cos(a) * l * .9, PLANT[2] + 20 * Math.cos(k)];
+      const mid = [(base[0] + tip[0]) / 2 + Math.cos(a) * 16, (base[1] + tip[1]) / 2 - Math.sin(a) * 16, (base[2] + tip[2]) / 2];
+      const mid2 = [(base[0] + tip[0]) / 2 - Math.cos(a) * 16, (base[1] + tip[1]) / 2 + Math.sin(a) * 16, (base[2] + tip[2]) / 2];
+      shadowOf([base, mid, tip, mid2]);
+    }
+    // the suncatcher's shadow: a ring
+    const ang = scAngle(b, t), su = [Math.cos(ang), 0, Math.sin(ang)], sv = [0, 1, 0];
+    shadowOf(circle3(SUNCATCHER, su, sv, SC_R, 28));
+    lc.globalCompositeOperation = 'source-over';
+    c.save(); c.globalCompositeOperation = 'screen'; c.globalAlpha = Ik * .62; c.filter = `blur(${2.5 * f}px)`;
+    // tint the white mask with the light colour
+    lc.globalCompositeOperation = 'source-in'; lc.fillStyle = css(litCol); lc.fillRect(0, 0, W, H); lc.globalCompositeOperation = 'source-over';
+    c.drawImage(LIGHT, 0, 0, W, H); c.restore();
+    // rainbow spots thrown by the suncatcher (daytime only)
+    if (S === sun.dir) {
+      const hues = ['#FF8A8A', '#FFC46B', '#FFF07A', '#8EE39A', '#7FD3FF', '#9C9CFF', '#E09CFF'];
+      c.save(); c.globalCompositeOperation = 'screen';
+      for (let k = 0; k < 14; k++) {
+        const a = ang * 1.3 + k / 14 * TAU, rr = SC_R * (1.4 + .5 * Math.sin(ang * 2 + k));
+        const p3 = onFloor([SUNCATCHER[0] + Math.cos(a) * rr, SUNCATCHER[1] + Math.sin(a) * rr * .6, SUNCATCHER[2]], S);
+        if (p3[2] > 0 || p3[2] < -RM.depth || Math.abs(p3[0]) > RM.wx) continue;
+        const sp = screenPoly(cam, circle3(p3, [1, 0, 0], [0, 0, 1], 9 + 4 * hash(k), 12));
+        if (!sp) continue;
+        c.fillStyle = hues[k % 7]; c.globalAlpha = Ik * (.35 + .35 * Math.sin(ang * 3 + k) ** 2);
+        c.beginPath(); pathPoly(c, sp); c.fill();
+      }
+      c.restore();
+    }
+  }
+
+  // window frame, mullions, sill
+  const FF = P.frame, FS = P.frameSide, FT = mixRgb(P.frame, P.ink, .3);
+  box(c, cam, -RM.hx, -542, RM.hy0, RM.hy1, -28, 10, FF, FS, FT);
+  box(c, cam, 542, RM.hx, RM.hy0, RM.hy1, -28, 10, FF, FS, FT);
+  box(c, cam, -RM.hx, RM.hx, PY1, RM.hy1, -28, 10, FF, FS, FT);
+  box(c, cam, -RM.hx, RM.hx, RM.hy0, PY0, -28, 10, FF, FS, FT);
+  for (const x of MULL) box(c, cam, x - 9, x + 9, PY0, PY1, -16, 6, FF, FS, FT);
+  box(c, cam, -600, 600, 22, RM.hy0, -48, 0, mixRgb(P.frame, P.shadow, .08), FS, FT);
+
+  // lantern on the sill (glows from late afternoon)
+  const lamp = clamp(prog(17.2, 18.2, ((hour % 24) + 24) % 24) + night) * (1 - clamp(prog(4.9, 6.2, ((hour % 24) + 24) % 24)) * (((hour % 24) + 24) % 24 < 12 ? 1 : 0));
+  {
+    const q = cam.toCam(LANTERN);
+    if (q[2] > NEAR) {
+      const p = cam.proj(q), s = cam.f / q[2];
+      if (lamp > 0) {
+        const g = c.createRadialGradient(p[0], p[1] - 30 * s, 0, p[0], p[1] - 30 * s, 260 * s);
+        g.addColorStop(0, css(P.gold, .55 * lamp)); g.addColorStop(1, css(P.gold, 0));
+        c.save(); c.globalCompositeOperation = 'screen'; c.fillStyle = g; c.fillRect(p[0] - 260 * s, p[1] - 290 * s, 520 * s, 520 * s); c.restore();
+      }
+      c.fillStyle = css(P.gold); c.beginPath(); c.roundRect(p[0] - 17 * s, p[1] - 6 * s, 34 * s, 6 * s, 2 * s); c.fill();
+      c.fillStyle = css(mixRgb(P.glass, P.gold, lamp * .8), .85); c.beginPath(); c.roundRect(p[0] - 13 * s, p[1] - 48 * s, 26 * s, 42 * s, 4 * s); c.fill();
+      c.strokeStyle = css(P.gold); c.lineWidth = 2.2 * s; c.beginPath(); c.roundRect(p[0] - 13 * s, p[1] - 48 * s, 26 * s, 42 * s, 4 * s); c.stroke();
+      c.beginPath(); c.moveTo(p[0], p[1] - 48 * s); c.lineTo(p[0], p[1] - 58 * s); c.stroke();
+      c.fillStyle = css(P.gold); c.beginPath(); c.moveTo(p[0] - 16 * s, p[1] - 48 * s); c.lineTo(p[0], p[1] - 58 * s); c.lineTo(p[0] + 16 * s, p[1] - 48 * s); c.fill();
+      if (lamp > 0) { c.fillStyle = css(mixRgb(P.gold, P.ink, .6), lamp); c.beginPath(); c.ellipse(p[0], p[1] - 22 * s, 5 * s, 9 * s, 0, 0, TAU); c.fill(); }
+    }
+  }
+
+  // the nautilus suncatcher, turning on its thread
+  {
+    const ang = scAngle(b, t), u = [Math.cos(ang), 0, Math.sin(ang)], v = [0, 1, 0];
+    const L3 = (x, y) => [SUNCATCHER[0] + u[0] * x, SUNCATCHER[1] + y, SUNCATCHER[2] + u[2] * x];
+    line3(c, cam, [SUNCATCHER[0], PY1, SUNCATCHER[2]], L3(0, SC_R), P.gold, 1.4 * f);
+    const glowK = S === sun.dir ? Ik : 0;
+    const cols = [P.sea, P.glass, P.lav, P.seaNear, P.curtain, P.glass];
+    for (let k = 0; k < 11; k++) {
+      const pts = scLocal(k);
+      const poly = [L3(0, 0), ...pts.map(([x, y]) => L3(x, y))];
+      fill3(c, cam, poly, mixRgb(cols[k % cols.length], P.ink, .15 + glowK * .35), .9);
+    }
+    const ring = [...circle3(SUNCATCHER, u, v, SC_R, 40)], inner = circle3(SUNCATCHER, u, v, SC_R * .86, 40);
+    const so = screenPoly(cam, ring), si = screenPoly(cam, inner);
+    if (so && si) { c.fillStyle = css(P.gold); c.beginPath(); pathPoly(c, so); pathPoly(c, si.reverse()); c.fill('nonzero'); }
+    c.strokeStyle = css(P.gold); c.lineWidth = 1.6 * f; c.beginPath();
+    for (let k = 0; k <= 60; k++) { const th = k / 60 * 11 * .62, r = SC_R * .86 * Math.exp(-.2 * (11 - k / 60 * 11) * .62 * 1.4); const q = cam.toCam(L3(Math.cos(th + 2) * r, Math.sin(th + 2) * r)); if (q[2] <= NEAR) continue; const pp = cam.proj(q); if (k) c.lineTo(pp[0], pp[1]); else c.moveTo(pp[0], pp[1]); }
+    c.stroke();
+  }
+
+  // curtains: folded cloth that billows into the room on the gusts
+  const curtain = (x0, x1, side) => {
+    const NC = 14, NR = 10, top = 416, bot = 6, zc = -58;
+    const glow = S === sun.dir ? Ik * .35 : 0;
+    const vert = (i, k) => {
+      const q = k / NR, x = lerp(x0, x1, i / NC), fold = (i % 2 ? 11 : -11) * (1 - .3 * q);
+      const bill = w * Math.pow(q, 1.5) * (120 + 40 * Math.sin(TAU * cyc(t, 9, i * .05)));
+      const sway = w * Math.pow(q, 2) * 60 * Math.sin(TAU * cyc(t, 7, i * .08 + side * .3)) - side * w * Math.pow(q, 1.4) * 44;
+      return [x + sway, lerp(top, bot, q) + w * q * q * 48, zc + fold - bill];
+    };
+    for (let i = 0; i < NC; i++) {
+      const pts = [];
+      for (let k = 0; k <= NR; k++) pts.push(vert(i, k));
+      for (let k = NR; k >= 0; k--) pts.push(vert(i + 1, k));
+      const lit = (i % 2 === 0) === (side < 0);
+      fill3(c, cam, pts, mixRgb(lit ? P.curtain : P.curtainShade, P.lit, glow));
+    }
+  };
+  curtain(-740, -520, -1); curtain(520, 740, 1);
+  line3(c, cam, [-770, 420, -58], [770, 420, -58], P.gold, 3 * f);
+
+  // hanging glass orbs
+  for (let i = 0; i < ORBS.length; i++) {
+    const p3 = orbPos(i, b, t);
+    line3(c, cam, [ORBS[i][0], RM.ceil, ORBS[i][2]], [p3[0], p3[1] + ORBS[i][3], p3[2]], P.ink, 1 * f, .7);
+    drawOrb3(c, cam, p3, ORBS[i][3], P, S, Ik);
+  }
+
+  // table: glass top, gold legs, a vase of daisies
+  for (let k = 0; k < 3; k++) {
+    const a = k / 3 * TAU + .5, x = TABLE[0] + Math.cos(a) * TABLE_R * .75, z = TABLE[2] + Math.sin(a) * TABLE_R * .75;
+    line3(c, cam, [x, TABLE[1], z], [x + Math.cos(a) * 10, 0, z + Math.sin(a) * 10], P.gold, 3.2 * f);
+  }
+  fill3(c, cam, circle3(TABLE, [1, 0, 0], [0, 0, 1], TABLE_R, 44), P.glass, .55);
+  const rim = screenPoly(cam, circle3(TABLE, [1, 0, 0], [0, 0, 1], TABLE_R, 44));
+  if (rim) { c.strokeStyle = css(P.ink, .7); c.lineWidth = 2 * f; c.beginPath(); pathPoly(c, rim); c.stroke(); }
+  billboard(c, cam, [TABLE[0], TABLE[1], TABLE[2]], (x, s) => drawVase(x, s * .72, P, t, w));
+  billboard(c, cam, PLANT, (x, s) => drawPlant(x, s, P, t, w));
+
+  // light shafts through the panes (volumetric haze), with dust turning in them
+  if (S && Ik > .01) {
+    c.save(); c.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 90; i++) {
+      const y = 20 + 360 * hash(i * 2.3) + 30 * osc(t, 3 + i % 4, hash(i)), z = -40 - 700 * hash(i * 5.1);
+      const x0 = -540 + 1080 * hash(i * 7.9) + 40 * osc(t, 2 + i % 3, hash(i * 3)), gx = x0 + S[0] / S[1] * 0;
+      // lit only if the ray back towards the sun passes through a pane
+      const k = (0 - z) / S[2], wx = gx + S[0] * k, wy = y + S[1] * k;
+      if (wy < PY0 || wy > PY1 || !PANES.some(([a0, a1]) => wx > a0 && wx < a1)) continue;
+      const q = cam.toCam([gx, y, z]); if (q[2] <= NEAR) continue;
+      const p = cam.proj(q), r = Math.max(1, cam.f * (1.4 + 1.6 * hash(i)) / q[2]);
+      c.fillStyle = css(litCol, Ik * (.35 + .5 * Math.abs(osc(t, 9, hash(i * 11)))));
+      c.beginPath(); c.arc(p[0], p[1], r, 0, TAU); c.fill();
+    }
+    c.restore();
+    c.save(); c.globalCompositeOperation = 'screen';
+    for (const [x0, x1] of PANES) {
+      const cn = [[x0, PY0, 0], [x1, PY0, 0], [x1, PY1, 0], [x0, PY1, 0]], fl = cn.map(p => onFloor(p, S));
+      for (let e = 0; e < 4; e++) {
+        const a = cn[e], bq = cn[(e + 1) % 4], fa = fl[e], fb = fl[(e + 1) % 4];
+        const sp = screenPoly(cam, [a, bq, fb, fa]); if (!sp) continue;
+        c.fillStyle = css(litCol, .045 * Ik); c.beginPath(); pathPoly(c, sp); c.fill();
+      }
+    }
+    c.restore();
+  }
+  return { S, Ik };
+}
+
+// flat-shaded glass sphere: body, a darker lower crescent, the window caught as a highlight
+function drawOrb3(c, cam, p3, r, P, S, Ik) {
+  const q = cam.toCam(p3); if (q[2] <= NEAR) return;
+  const p = cam.proj(q), R = cam.f * r / q[2];
+  drawOrb2(c, p[0], p[1], R, P, Ik);
+}
+function drawOrb2(c, x, y, R, P, lit = .5) {
+  c.save();
+  c.beginPath(); c.arc(x, y, R, 0, TAU); c.clip();
+  c.fillStyle = css(mixRgb(P.glass, P.ink, .25 + .25 * lit), .8); c.fillRect(x - R, y - R, 2 * R, 2 * R);
+  c.fillStyle = css(mixRgb(P.glass, P.sea, .45), .75); c.beginPath(); c.arc(x + R * .25, y + R * .35, R * .95, 0, TAU); c.fill();
+  c.fillStyle = css(mixRgb(P.seaNear, P.lav, .3), .6); c.beginPath(); c.arc(x + R * .1, y + R * .95, R * .7, 0, TAU); c.fill();
+  c.restore();
+  c.fillStyle = css(P.ink, .92);
+  c.beginPath(); c.roundRect(x - R * .52, y - R * .56, R * .22, R * .36, R * .06); c.fill();
+  c.beginPath(); c.roundRect(x - R * .24, y - R * .56, R * .22, R * .36, R * .06); c.fill();
+  c.beginPath(); c.arc(x + R * .45, y + R * .42, R * .1, 0, TAU); c.fill();
+  c.strokeStyle = css(P.ink, .6); c.lineWidth = Math.max(1, R * .05); c.beginPath(); c.arc(x, y, R * .97, Math.PI * .9, Math.PI * 1.6); c.stroke();
+}
+// things drawn facing the camera, scaled by distance
+function billboard(c, cam, p3, draw) {
+  const q = cam.toCam(p3); if (q[2] <= NEAR) return;
+  const p = cam.proj(q), s = cam.f / q[2];
+  c.save(); c.translate(p[0], p[1]); draw(c, s); c.restore();
+}
+function drawVase(c, s, P, t, w) {
+  // stems and daisies above a round glass vase
+  const heads = [[-24, -118, 12], [2, -136, 14], [26, -112, 11], [-8, -100, 10], [16, -126, 9], [-30, -96, 8]];
+  c.strokeStyle = css(P.leaf); c.lineWidth = 2.4 * s; c.lineCap = 'round';
+  heads.forEach(([x, y], i) => { const sw = 3 * Math.sin(TAU * cyc(t, 10, i * .1)) * (1 + w); c.beginPath(); c.moveTo(0, -40 * s); c.quadraticCurveTo(x * .3 * s, (y * .6) * s, (x + sw) * s, y * s); c.stroke(); });
+  heads.forEach(([x, y, r], i) => {
+    const sw = 3 * Math.sin(TAU * cyc(t, 10, i * .1)) * (1 + w), cx = (x + sw) * s, cy = y * s, rr = r * s;
+    c.fillStyle = css(P.ink);
+    for (let k = 0; k < 10; k++) { const a = k / 10 * TAU + i; c.beginPath(); c.ellipse(cx + Math.cos(a) * rr * .6, cy + Math.sin(a) * rr * .6, rr * .5, rr * .2, a, 0, TAU); c.fill(); }
+    c.fillStyle = css(P.gold); c.beginPath(); c.arc(cx, cy, rr * .32, 0, TAU); c.fill();
+  });
+  c.fillStyle = css(P.glass, .7); c.beginPath(); c.ellipse(0, -24 * s, 22 * s, 26 * s, 0, 0, TAU); c.fill();
+  c.fillStyle = css(mixRgb(P.glass, P.sea, .4), .6); c.beginPath(); c.ellipse(0, -16 * s, 20 * s, 14 * s, 0, 0, TAU); c.fill();
+  c.fillStyle = css(P.ink, .85); c.beginPath(); c.roundRect(-13 * s, -40 * s, 5 * s, 14 * s, 2 * s); c.fill();
+}
+function drawPouf(c, s, P) {
+  c.fillStyle = css(P.shadow, .25); c.beginPath(); c.ellipse(0, 0, 120 * s, 22 * s, 0, 0, TAU); c.fill();
+  c.fillStyle = css(P.curtainShade); c.beginPath(); c.ellipse(0, -40 * s, 112 * s, 46 * s, 0, 0, TAU); c.fill();
+  c.fillStyle = css(P.curtain); c.beginPath(); c.ellipse(0, -52 * s, 104 * s, 34 * s, 0, 0, TAU); c.fill();
+  c.strokeStyle = css(P.curtainShade); c.lineWidth = 2 * s;
+  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI; c.beginPath(); c.moveTo(0, -52 * s); c.lineTo(Math.cos(a) * 100 * s, -52 * s + Math.sin(a) * 32 * s); c.stroke(); }
+  c.fillStyle = css(P.lav); c.beginPath(); c.arc(0, -54 * s, 7 * s, 0, TAU); c.fill();
+}
+function drawPlant(c, s, P, t, w) {
+  for (let k = 0; k < 9; k++) {
+    const a = -1.25 + k * .31 + .06 * Math.sin(TAU * cyc(t, 11, k * .13)) * (1 + w), l = (120 + 50 * hash(k * 3)) * s;
+    c.save(); c.translate(0, -70 * s); c.rotate(a);
+    c.fillStyle = css(k % 2 ? P.leaf : P.leafShade);
+    c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(24 * s, -l * .5, 0, -l); c.quadraticCurveTo(-24 * s, -l * .5, 0, 0); c.fill();
+    c.strokeStyle = css(P.leafShade, .8); c.lineWidth = 1.5 * s; c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -l * .9); c.stroke();
+    c.restore();
+  }
+  c.fillStyle = css(P.wallShade); c.beginPath(); c.moveTo(-44 * s, -76 * s); c.lineTo(44 * s, -76 * s); c.lineTo(34 * s, 0); c.lineTo(-34 * s, 0); c.closePath(); c.fill();
+  c.fillStyle = css(P.frame); c.fillRect(-48 * s, -84 * s, 96 * s, 12 * s);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Noon: six close-ups cut on the beat, then the room from above with
+ *  the table's shadow at its shortest, held for a breath.
+ * ------------------------------------------------------------------ */
+function star4(c, x, y, r, rot = 0, pinch = .18) {
+  c.beginPath();
+  for (let k = 0; k < 8; k++) { const a = rot + k * Math.PI / 4 - Math.PI / 2, rr = k % 2 ? r * pinch : r; if (k) c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  c.closePath(); c.fill();
+}
+function sparkleField(c, P, u, seed, n, x0, y0, x1, y1, delay = 0) {
+  c.fillStyle = css(P.ink);
+  for (let i = 0; i < n; i++) {
+    const q = clamp((u - delay - hash(seed + i) * .5) / .35);
+    if (q <= 0 || q >= 1) continue;
+    const s = Math.sin(Math.PI * q) * (6 + 16 * hash(seed + i * 2.3));
+    star4(c, lerp(x0, x1, hash(seed + i * 4.1)), lerp(y0, y1, hash(seed + i * 7.7)), s, q * .8);
+  }
+}
+function vGlass(c, P, u, t) {                              // the orb up close: the room and the sea caught upside down inside it
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, css(P.skyTop)); g.addColorStop(1, css(P.skyHor));
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = css(P.frame, .85); c.fillRect(140, 0, 90, H); c.fillRect(1690, 0, 90, H);   // mullions, out of focus
+  c.fillStyle = css(P.frame, .5); c.fillRect(0, 980, W, 100);
+  const sw = .16 * Math.sin(TAU * (u * .8 + .15));
+  const R = 360 * (.9 + .1 * outBack(clamp(u * 2.5), 2)), px = 960, py = -700, len = 1240;
+  const x = px + Math.sin(sw) * len, y = py + Math.cos(sw) * len;
+  c.strokeStyle = css(P.ink, .85); c.lineWidth = 3; c.beginPath(); c.moveTo(px, -20); c.lineTo(x, y - R); c.stroke();
+  // soft caustic under the orb
+  const cg = c.createRadialGradient(x + 40, 1040, 10, x + 40, 1040, 420); cg.addColorStop(0, css(P.ink, .55)); cg.addColorStop(1, css(P.ink, 0));
+  c.fillStyle = cg; c.fillRect(x - 400, 700, 900, 380);
+  c.save(); c.beginPath(); c.arc(x, y, R, 0, TAU); c.clip();
+  c.translate(x, y); c.rotate(-sw * 1.5); c.scale(1, -1);                                   // the world, inverted by the glass
+  const sk = c.createLinearGradient(0, -R * .15, 0, R); sk.addColorStop(0, css(P.skyHor)); sk.addColorStop(1, css(P.skyTop));
+  c.fillStyle = sk; c.fillRect(-R, -R * .15, 2 * R, R * 1.2);
+  c.fillStyle = css(P.sea); c.fillRect(-R, -R, 2 * R, R * .85);
+  c.fillStyle = css(P.seaLine, .8);
+  for (let k = 0; k < 12; k++) { const yy = -R * .17 - Math.pow(k / 12, 1.5) * R * .8, th = 3 + k * 1.4; for (let j = 0; j < 3; j++) { const xx = -R + ((hash(k * 3 + j) + cyc(t, 16) * (j + 1) * .3) % 1) * 2 * R; c.beginPath(); c.roundRect(xx, yy, R * (.12 + .2 * hash(k + j * 7)), th, th / 2); c.fill(); } }
+  c.fillStyle = css(P.sun); c.beginPath(); c.arc(R * .28, R * .55, R * .11, 0, TAU); c.fill();
+  c.fillStyle = css(P.isle); c.beginPath(); c.moveTo(R * .35, -R * .15); c.quadraticCurveTo(R * .55, R * .05, R * .85, -R * .15); c.fill();
+  c.fillStyle = css(P.frame, .9);                                                          // the window frame bent round the glass
+  for (const xx of [-.62, .05, .7]) { c.beginPath(); c.moveTo(R * xx - 16, -R); c.quadraticCurveTo(R * xx * 1.25, 0, R * xx - 16, R); c.lineTo(R * xx + 16, R); c.quadraticCurveTo(R * xx * 1.25 + 30, 0, R * xx + 16, -R); c.fill(); }
+  c.restore();
+  // glass: rim shading and highlights
+  const sh = c.createRadialGradient(x - R * .3, y - R * .35, R * .2, x, y, R);
+  sh.addColorStop(0, 'rgba(255,255,255,0.18)'); sh.addColorStop(.75, 'rgba(255,255,255,0)'); sh.addColorStop(1, css(P.shadow, .45));
+  c.fillStyle = sh; c.beginPath(); c.arc(x, y, R, 0, TAU); c.fill();
+  c.strokeStyle = css(P.ink, .9); c.lineWidth = 7; c.lineCap = 'round'; c.beginPath(); c.arc(x, y, R * .93, Math.PI * 1.05, Math.PI * 1.45); c.stroke();
+  c.lineWidth = 3; c.beginPath(); c.arc(x, y, R * .93, Math.PI * 1.52, Math.PI * 1.6); c.stroke();
+  c.fillStyle = css(P.ink, .95); c.beginPath(); c.ellipse(x - R * .42, y - R * .5, R * .1, R * .05, -.6, 0, TAU); c.fill();
+  c.beginPath(); c.arc(x + R * .55, y + R * .48, R * .045, 0, TAU); c.fill();
+  sparkleField(c, P, u, 11, 16, 260, 100, 1660, 1000, .05);
+}
+
+function vGlitter(c, P, u, t) {                            // the sea from above, a sweep of glints
+  c.fillStyle = css(P.sea); c.fillRect(0, 0, W, H);
+  c.save(); c.translate(W / 2, H / 2); c.rotate(-.35);
+  const off = u * 260;
+  for (let k = -9; k <= 9; k++) {
+    const y = k * 120 + (off % 120);
+    c.fillStyle = css(k % 2 ? P.seaNear : mixRgb(P.sea, P.seaNear, .5));
+    c.beginPath();
+    for (let i = 0; i <= 40; i++) { const x = -1400 + i * 70, yy = y + 18 * Math.sin(i * .6 + k + u * 6); if (i) c.lineTo(x, yy); else c.moveTo(x, yy); }
+    c.lineTo(1400, y + 60); c.lineTo(-1400, y + 60); c.closePath(); c.fill();
+  }
+  // a foam line that sweeps across
+  const fx = lerp(-1400, 1400, inOutCubic(clamp(u * 1.3)));
+  c.strokeStyle = css(P.ink); c.lineWidth = 10; c.lineCap = 'round';
+  c.beginPath(); for (let i = 0; i <= 30; i++) { const y = -800 + i * 55, x = fx + 30 * Math.sin(i * .9 + u * 8); if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.stroke();
+  c.restore();
+  c.fillStyle = css(P.ink);
+  for (let i = 0; i < 90; i++) {
+    const x = hash(i * 3.1) * W, y = hash(i * 5.7) * H, d = (x + y) / (W + H);
+    const q = clamp((u * 1.4 - d * .9) / .3); if (q <= 0 || q >= 1) continue;
+    star4(c, x, y, Math.sin(Math.PI * q) * (14 + 40 * hash(i)), q);
+  }
+}
+function nautilusChamber(k, R) {                           // chamber k between the outer whorl and the one inside it
+  const a = R / Math.exp(.19 * (.25 + 18 * .52)), rOf = th => a * Math.exp(.19 * th), th0 = .25 + k * .52, th1 = th0 + .52, pts = [];
+  for (let j = 0; j <= 8; j++) { const th = lerp(th0, th1, j / 8); pts.push([Math.cos(th) * rOf(th), Math.sin(th) * rOf(th)]); }
+  for (let j = 8; j >= 0; j--) { const th = lerp(th0, th1, j / 8), r = th > TAU ? rOf(th - TAU) : rOf(th) * .18; pts.push([Math.cos(th) * r, Math.sin(th) * r]); }
+  return pts;
+}
+function vNautilus(c, P, u, t) {                           // the suncatcher's glass: chambers light up from the centre outwards
+  c.fillStyle = css(P.wall); c.fillRect(0, 0, W, H);
+  const cx = W / 2 + 40, cy = H / 2 + 10, R = 420, rot = -1.2 * (1 - outBack(clamp(u * 1.5), 1.3)) + u * .3;
+  c.fillStyle = css(P.lav, .35); c.beginPath(); c.arc(cx, cy, R * 1.16 * outBack(clamp(u * 3), 1.6), 0, TAU); c.fill();
+  c.save(); c.translate(cx, cy); c.rotate(rot);
+  const cols = [P.sea, P.glass, P.lav, P.seaNear, P.gold, P.glass, P.sea, P.lav];
+  const N = 18;
+  for (let k = 0; k < N; k++) {
+    const q = clamp((u - k * .028) / .12); if (q <= 0) continue;
+    const pts = nautilusChamber(k, R);
+    c.fillStyle = css(mixRgb(cols[k % cols.length], P.ink, .1 * (1 - q)), .92);
+    c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x * q + (1 - q) * pts[0][0] * .2, y * q) : c.moveTo(x * q, y * q)); c.closePath(); c.fill();
+    c.strokeStyle = css(P.gold); c.lineWidth = 7; c.lineJoin = 'round'; c.stroke();
+  }
+  // the outer whorl and the frame ring
+  const draw = outCubic(clamp(u * 2.2));
+  c.strokeStyle = css(P.gold); c.lineWidth = 14; c.lineCap = 'round'; c.beginPath();
+  const a = R / Math.exp(.19 * (.25 + 18 * .52));
+  for (let j = 0; j <= 120 * draw; j++) { const th = .25 + j / 120 * N * .52, r = a * Math.exp(.19 * th); if (j) c.lineTo(Math.cos(th) * r, Math.sin(th) * r); else c.moveTo(Math.cos(th) * r, Math.sin(th) * r); }
+  c.stroke();
+  c.lineWidth = 24; c.beginPath(); c.arc(0, 0, R * 1.04, -Math.PI / 2, -Math.PI / 2 + TAU * draw); c.stroke();
+  c.fillStyle = css(P.gold); c.beginPath(); c.arc(0, -R * 1.04, 16, 0, TAU); c.fill();
+  c.restore();
+  const hues = ['#FF8A8A', '#FFC46B', '#FFF07A', '#8EE39A', '#7FD3FF', '#9C9CFF', '#E09CFF'];
+  for (let k = 0; k < 28; k++) {
+    const q = clamp((u - .3 - hash(k) * .25) / .45); if (q <= 0) continue;
+    const ang = k / 28 * TAU + u * .6, rr = R * (1.12 + .45 * outCubic(q));
+    c.fillStyle = hues[k % 7]; c.globalAlpha = .8 * Math.sin(Math.PI * q);
+    c.beginPath(); c.arc(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr, 9 + 9 * hash(k * 3), 0, TAU); c.fill();
+  }
+  c.globalAlpha = 1;
+}
+
+function dropShadowed(c, P, draw, dx, dy) {                 // a flat shape and its soft shadow
+  c.save(); c.translate(dx, dy); c.filter = 'blur(10px)'; c.globalAlpha = .35; draw(true); c.restore();
+  c.save(); draw(false); c.restore();
+}
+function vShells(c, P, u, t) {                             // two half-beat cuts: scallop, then starfish
+  const first = u < .5, q = first ? u * 2 : u * 2 - 1;
+  c.fillStyle = css(first ? P.seaNear : P.lav); c.fillRect(0, 0, W, H);
+  c.fillStyle = css(P.ink, .5);
+  for (let i = 0; i < 40; i++) { const x = (hash(i + (first ? 0 : 50)) * W + q * 120) % W, y = hash(i * 3.3 + (first ? 0 : 50)) * H; c.beginPath(); c.arc(x, y, 3 + 4 * hash(i * 7), 0, TAU); c.fill(); }
+  const s = pop(q, 0, .45, 2.2), rot = (first ? -.4 : .6) * (1 - outCubic(clamp(q * 1.4))) + q * (first ? .1 : .5);
+  if (s <= 0) return;
+  dropShadowed(c, P, sh => {
+    c.translate(W / 2, H / 2 + 20); c.rotate(rot); c.scale(s, s);
+    if (first) {
+      const n = 11;
+      c.fillStyle = sh ? css(P.shadow) : css(P.curtain);
+      c.beginPath(); c.moveTo(0, 150);
+      for (let k = 0; k <= n; k++) { const a = Math.PI + k / n * Math.PI, r = 300 + (k % 2 ? 0 : 18); c.lineTo(Math.cos(a) * r, Math.sin(a) * r * .95); }
+      c.closePath(); c.fill();
+      if (!sh) {
+        c.strokeStyle = css(P.curtainShade); c.lineWidth = 8; c.lineCap = 'round';
+        for (let k = 1; k < n; k++) { const a = Math.PI + k / n * Math.PI; c.beginPath(); c.moveTo(0, 130); c.lineTo(Math.cos(a) * 280, Math.sin(a) * 265); c.stroke(); }
+        c.fillStyle = css(P.curtainShade); c.beginPath(); c.moveTo(-70, 110); c.lineTo(70, 110); c.lineTo(50, 175); c.lineTo(-50, 175); c.closePath(); c.fill();
+      }
+    } else {
+      c.fillStyle = sh ? css(P.shadow) : css(P.gold);
+      c.beginPath();
+      for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 110 : 300; const x = Math.cos(a) * r, y = Math.sin(a) * r; if (k) c.quadraticCurveTo(Math.cos(a - Math.PI / 10) * (k % 2 ? 200 : 170), Math.sin(a - Math.PI / 10) * (k % 2 ? 200 : 170), x, y); else c.moveTo(x, y); }
+      c.closePath(); c.fill();
+      if (!sh) { c.fillStyle = css(P.ink, .85); for (let k = 0; k < 5; k++) for (let j = 1; j < 6; j++) { const a = -Math.PI / 2 + k * TAU / 5, r = j * 42; c.beginPath(); c.arc(Math.cos(a) * r, Math.sin(a) * r, 9 - j, 0, TAU); c.fill(); } }
+    }
+  }, 30, 38);
+  sparkleField(c, P, q, first ? 31 : 41, 10, 300, 150, 1600, 950, .15);
+}
+function vWave(c, P, u, t) {                               // a thick crescent wave flips over in 3D, fast through edge-on
+  c.fillStyle = css(P.skyTop); c.fillRect(0, 0, W, H);
+  c.fillStyle = css(P.skyMid, .5); c.beginPath(); c.arc(W / 2 + 60, H / 2, 470, 0, TAU); c.fill();
+  c.strokeStyle = css(P.ink, .7); c.lineCap = 'round';
+  for (let i = 0; i < 30; i++) {
+    const y = hash(i * 2.7) * H, x = W - ((u * (2600 + 1800 * hash(i)) + hash(i * 5) * 3400) % 3800), l = 120 + 420 * hash(i * 9);
+    c.lineWidth = 2 + 5 * hash(i * 3); c.beginPath(); c.moveTo(x, y); c.lineTo(x + l, y); c.stroke();
+  }
+  const ang = -.5 + (Math.PI + 1) * inOutExpo(clamp((u - .12) / .7)), cs = Math.cos(ang), sn = Math.sin(ang);
+  const cam = makeCam([0, 0, -1500], 0, 0, .18, 1350);
+  const shape = [];
+  for (let k = 0; k <= 30; k++) { const a = Math.PI * .1 + k / 30 * Math.PI * 1.4; shape.push([Math.cos(a) * 400, Math.sin(a) * 400]); }
+  for (let k = 30; k >= 0; k--) { const a = Math.PI * .1 + k / 30 * Math.PI * 1.4; shape.push([Math.cos(a) * 290 + 100, Math.sin(a) * 310 + 50]); }
+  const depth = 90, P3 = (x, y, z) => [x * cs + z * sn, y, -x * sn + z * cs];
+  const front = shape.map(([x, y]) => P3(x, y, -depth / 2)), back = shape.map(([x, y]) => P3(x, y, depth / 2));
+  const faceFront = cs > 0, far = faceFront ? back : front, near = faceFront ? front : back;
+  fill3(c, cam, far, P.sea);
+  for (let k = 0; k < shape.length; k++) { const j = (k + 1) % shape.length; fill3(c, cam, [front[k], front[j], back[j], back[k]], k < 31 ? mixRgb(P.sea, P.shadow, .35) : mixRgb(P.seaNear, P.shadow, .15)); }
+  fill3(c, cam, near, faceFront ? P.seaNear : P.glass);
+  // foam dots on the face
+  if (Math.abs(cs) > .3) { c.fillStyle = css(P.ink); for (let k = 0; k < 9; k++) { const a = Math.PI * .2 + k / 9 * Math.PI * 1.2, sp = screenPoly(cam, circle3(P3(Math.cos(a) * 350, Math.sin(a) * 355, faceFront ? -depth / 2 - 1 : depth / 2 + 1), [cs, 0, -sn], [0, 1, 0], 10 + 5 * hash(k), 10)); if (sp) { c.beginPath(); pathPoly(c, sp); c.fill(); } } }
+  c.fillStyle = css(P.ink);
+  for (let k = 0; k < 7; k++) { const a = u * TAU * .6 + k / 7 * TAU, r = 560 + 40 * Math.sin(k); c.beginPath(); c.arc(W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r * .45, 8 + 6 * hash(k), 0, TAU); c.fill(); }
+}
+
+function vZenithSun(c, P, u, t) {                          // looking straight up into the sun
+  const z = 1 + 2.2 * inExpo(clamp(u * 1.05));
+  c.fillStyle = css(P.skyTop); c.fillRect(0, 0, W, H);
+  c.save(); c.translate(W / 2, H / 2); c.scale(z, z);
+  const rings = [[520, P.skyMid], [430, P.skyHor], [340, mixRgb(P.skyHor, P.sun, .5)], [250, P.sun]];
+  rings.forEach(([r, col], k) => { c.fillStyle = css(col); c.beginPath(); c.arc(0, 0, r * (1 + .03 * Math.sin(u * 12 + k)), 0, TAU); c.fill(); });
+  c.strokeStyle = css(P.ink, .85); c.lineCap = 'round';
+  for (let i = 0; i < 48; i++) {
+    const a = i / 48 * TAU + u * .9, r0 = 560, r1 = r0 + (i % 3 ? 90 : 200) * outExpo(clamp(u * 2 - hash(i) * .4));
+    c.lineWidth = i % 3 ? 3 : 6; c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); c.stroke();
+  }
+  c.setLineDash([4, 18]); c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 600, u * 2, u * 2 + TAU); c.stroke(); c.setLineDash([]);
+  c.restore();
+  const flash = clamp((u - .82) / .18);
+  if (flash > 0) { c.fillStyle = css(P.ink, inCubic(flash)); c.fillRect(0, 0, W, H); }
+}
+const VIGNETTES = [vGlass, vGlitter, vNautilus, vShells, vWave, vZenithSun];
+
+function drawZenith(c, P, b, t) {                           // b in [22, 24): the room from above at noon
+  const u = (b - 22) / 2;
+  // the clock: the shadow swings to twelve, stops dead for a breath, then time runs on
+  const flashIn = 1 - clamp(u / .12);
+  const run = u < .32 ? outCubic(u / .32) * .95 : u < .8 ? .95 + .05 * outExpo((u - .32) / .08) : 1 + inCubic((u - .8) / .2) * .8;
+  const held = u >= .4 && u < .8;
+  const ang = -Math.PI / 2 - 1.5 * (1 - run), len = 20 + 520 * Math.abs(1 - run);
+  const zoom = 1.05 + .06 * u + (u > .8 ? .5 * inCubic((u - .8) / .2) : 0);
+  c.fillStyle = css(P.floor); c.fillRect(0, 0, W, H);
+  c.save(); c.translate(W / 2, H / 2); c.scale(zoom, zoom); c.rotate(u > .8 ? inCubic((u - .8) / .2) * .6 : 0);
+  c.strokeStyle = css(P.floorLine); c.lineWidth = 2;
+  for (let k = -14; k <= 14; k++) { c.beginPath(); c.moveTo(k * 90, -700); c.lineTo(k * 90, 700); c.stroke(); }
+  // rug as a dial face
+  [[430, P.lav], [392, P.curtain], [300, mixRgb(P.lav, P.curtain, .5)], [196, P.curtain]].forEach(([r, col]) => { c.fillStyle = css(col); c.beginPath(); c.arc(0, 0, r, 0, TAU); c.fill(); });
+  c.strokeStyle = css(P.shadow, .8);
+  for (let k = 0; k < 60; k++) {
+    const a = k / 60 * TAU - Math.PI / 2, big = k % 15 === 0, mid = k % 5 === 0;
+    c.lineWidth = big ? 10 : mid ? 5 : 2.5;
+    const r0 = big ? 330 : mid ? 348 : 356;
+    c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * 380, Math.sin(a) * 380); c.stroke();
+  }
+  c.fillStyle = css(P.gold); star4(c, 0, -300, 26, 0, .25);
+  // shadow of the table and vase
+  c.save(); c.rotate(ang + Math.PI / 2); c.fillStyle = css(P.shadow, .55); c.filter = 'blur(5px)';
+  c.beginPath(); c.moveTo(-150, 0); c.lineTo(-150 * .9, -len); c.arc(0, -len, 150 * .9, Math.PI, 0); c.lineTo(150, 0); c.arc(0, 0, 150, 0, Math.PI); c.fill(); c.restore();
+  // table top, seen from above, with the daisies
+  c.fillStyle = css(P.glass, .7); c.beginPath(); c.arc(0, 0, 150, 0, TAU); c.fill();
+  c.strokeStyle = css(P.ink); c.lineWidth = 5; c.beginPath(); c.arc(0, 0, 150, 0, TAU); c.stroke();
+  const heads = [[-40, -30, 26], [30, -44, 30], [44, 26, 24], [-20, 40, 22], [0, 0, 20], [-58, 20, 18]];
+  heads.forEach(([x, y, r], i) => {
+    const sp = held ? 0 : u * 2;
+    for (let k = 0; k < 12; k++) { const a = k / 12 * TAU + i + sp; c.fillStyle = css(P.ink); c.beginPath(); c.ellipse(x + Math.cos(a) * r * .62, y + Math.sin(a) * r * .62, r * .45, r * .17, a, 0, TAU); c.fill(); }
+    c.fillStyle = css(P.gold); c.beginPath(); c.arc(x, y, r * .32, 0, TAU); c.fill();
+  });
+  // the gnomon line points at the hour
+  c.strokeStyle = css(P.ink); c.lineWidth = 6; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(ang) * 300, Math.sin(ang) * 300); c.stroke();
+  c.restore();
+  if (flashIn > 0) { c.fillStyle = css(P.ink, flashIn); c.fillRect(0, 0, W, H); }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Camera: one continuous move outside and inside the room
+ * ------------------------------------------------------------------ */
+const CK = (b, x, y, z, yaw, pitch, f, ease = inOutCubic, roll = 0) => ({ b, x, y, z, yaw: yaw * D2R, pitch: pitch * D2R, f, ease, roll: roll * D2R });
+const CAM_KEYS = [
+  CK(0, 0, 176, 520, 6, 6, 1050),
+  CK(4, 0, 174, 360, -12, 5, 1080, inOutSine),
+  CK(7, 0, 172, 300, -9, 4, 1090, inOutSine),
+  CK(9.6, 0, 182, -800, 0, -3, 1080, inOutExpo),
+  CK(12, -130, 178, -770, -4, -3.5, 1080, inOutSine),
+  CK(14.8, 250, 172, -730, 7, -4.5, 1080, inOutCubic),
+  CK(16, 330, 266, -330, 3, .5, 1500, inExpo),
+  CK(24, -330, 112, -880, -8, 0, 1060, inOutSine),     // (cut: noon close-ups and the zenith sit between)
+  CK(27.2, -80, 92, -700, -1, 1, 1060, inOutCubic),
+  CK(32, 300, 190, -800, 8, -4, 1080, inOutSine),
+  CK(33.3, 80, 180, -330, 14, 0, 1120, inOutCubic),
+  CK(34.3, 80, 176, 280, 18, 3, 1080, outCubic),
+  CK(37, 70, 174, 380, 16, 5, 1060, inOutSine),
+  CK(40, 40, 176, 460, -12, 8, 1050, inOutSine),
+  CK(43.5, 30, 176, 480, -3, 19, 1000, inOutSine),
+  CK(46, 20, 176, 500, 4, 9, 1050, inOutSine),
+  CK(48, 0, 176, 520, 6, 6, 1050, inOutSine)
+];
+function camAt(b) {
+  const bb = wrapB(b);
+  let i = 0; while (i < CAM_KEYS.length - 2 && bb >= CAM_KEYS[i + 1].b) i++;
+  const A = CAM_KEYS[i], B = CAM_KEYS[i + 1], e = B.ease(clamp((bb - A.b) / (B.b - A.b)));
+  const L_ = k => lerp(A[k], B[k], e);
+  let x = L_('x'), y = L_('y'), z = L_('z'), yaw = L_('yaw'), pitch = L_('pitch'), f = L_('f');
+  // landing in the room: a small overshoot and settle
+  if (bb > 9.6 && bb < 12) { const s = (bb - 9.6) / 2.4; z += -36 * Math.sin(Math.PI * s) * (1 - s); }
+  // a slow handheld float
+  x += 6 * osc(t0g, 5, .1); y += 4 * osc(t0g, 7, .3); yaw += .004 * osc(t0g, 4, .6);
+  return makeCam([x, y, z], yaw, pitch, L_('roll'), f);
+}
+let t0g = 0;
+
+/* ------------------------------------------------------------------ *
+ *  Big moments for the sky: rays at sunrise, rings, star trails
+ * ------------------------------------------------------------------ */
+function skyFx(b) {
+  const bb = wrapB(b);
+  return {
+    rays: bb >= 4.9 && bb < 9 ? prog(4.9, 7.4, bb) : 0,
+    raysRot: bb * .05,
+    rings: [prog(5.1, 7.1, bb), prog(5.5, 7.5, bb), prog(35.3, 37.3, bb)],
+    moonRing: prog(38.6, 40.6, bb),
+    trail: Math.sin(Math.PI * prog(41, 46.5, bb)) * (bb > 41 && bb < 46.5 ? 1 : 0),
+    chart: bb > 39.5 && bb < 47.6 ? inOutCubic(prog(39.8, 43.5, bb)) * (1 - prog(46, 47.6, bb)) : 0,
+    constellations: bb > 40 && bb < 47.5 ? prog(40.5, 44, bb) * (1 - prog(46.5, 47.5, bb)) : 0
+  };
+}
+const FLOCK_AM = flockOf(5, 9, -1.2, .18, 1.4, .3), FLOCK_PM = flockOf(9, 11, 1.9, .2, -.6, .12);
+
+/* ------------------------------------------------------------------ *
+ *  Frame assembly
+ * ------------------------------------------------------------------ */
+let impulse = 0;
+function compose(c, t) {
+  c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+  c.lineCap = 'butt'; c.lineJoin = 'miter'; c.lineWidth = 1; c.setLineDash([]); c.lineDashOffset = 0;
+  t = ((t % L) + L) % L; t0g = t;
+  const b = t / BEAT, hour = hourAt(b), P = palette(hour);
+  if (b >= 16 && b < 22) {
+    const k = Math.floor(b - 16), u = b - 16 - k;
+    const punch = 1 + .05 * Math.exp(-u * 9);
+    c.save(); c.translate(W / 2, H / 2); c.scale(punch, punch); c.translate(-W / 2, -H / 2);
+    VIGNETTES[k](c, P, u, t); c.restore();
+  } else if (b >= 22 && b < 24) {
+    drawZenith(c, P, b, t);
+  } else {
+    const cam = camAt(b);
+    const hz = drawSky(c, cam, P, hour, t, b, skyFx(b));
+    drawSea(c, cam, P, hour, t, b, hz);
+    drawBirds(c, cam, P, t, FLOCK_AM, prog(5.6, 9, wrapB(b)));
+    drawBirds(c, cam, { ...P, ink: P.isle }, t, FLOCK_PM, prog(34.4, 37.5, wrapB(b)));
+    if (cam.pos[2] < 120) drawRoom(c, cam, P, hour, t, b);
+    // the flash as the sun slips under the horizon, and a punch-in when it breaks the horizon
+    const fl = Math.exp(-Math.pow((b - 35.35) / .18, 2)) * .5;
+    if (fl > .01) { c.fillStyle = css(P.glow, fl); c.fillRect(0, 0, W, H); }
+  }
+  // grade: a touch of warm/cool light and vignette
+  const vg = c.createRadialGradient(W / 2, H / 2, H * .45, W / 2, H / 2, H * 1.05);
+  vg.addColorStop(0, css(P.shadow, 0)); vg.addColorStop(1, css(P.shadow, .28));
+  c.fillStyle = vg; c.fillRect(0, 0, W, H);
+}
+function post(c, t) {                                       // paper and grain over everything, boiling at 12 fps
+  c.save();
+  c.globalCompositeOperation = 'soft-light'; c.globalAlpha = .5; c.drawImage(PAPER, 0, 0);
+  const step = Math.floor(cyc(t, 360) * 360), g = GRAIN[step % 4], ox = Math.floor(hash(step) * 384), oy = Math.floor(hash(step * 1.7) * 384);
+  c.globalCompositeOperation = 'overlay'; c.globalAlpha = .1;
+  for (let y = -oy; y < H; y += 384) for (let x = -ox; x < W; x += 384) c.drawImage(g, x, y);
+  c.restore();
+}
+function samplesFor(t) {
+  const b = ((t % L) + L) % L / BEAT;
+  if ((b > 7 && b < 10.5) || (b > 15 && b < 24.2) || (b > 32.5 && b < 35)) return 12;
+  return 6;
+}
+function renderFrame(fi, N) {
+  const t0 = fi / FPS;
+  N = N ?? samplesFor(t0);
+  if (N <= 1) compose(mctx, t0);
+  else {
+    const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+    for (let k = 0; k < N; k++) {
+      compose(sc, t0 + ((k + .5) / N - .5) * shutter);
+      mctx.globalAlpha = 1 / (k + 1); mctx.drawImage(SUB, 0, 0);
+    }
+    mctx.globalAlpha = 1;
+  }
+  post(mctx, t0);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Boot + render hooks (the soundtrack is appended below)
+ * ------------------------------------------------------------------ */
+window.__meta = { frames: FRAMES, fps: FPS };
+window.__ready = Promise.resolve({ missing: [] });
+window.__frame = async (fi, n) => { renderFrame(fi, n ?? undefined); return main.toDataURL('image/png'); };
+window.__hour = b => hourAt(b);
+/* ------------------------------------------------------------------ *
+ *  SOUND — mostly the room and the sea: waves, wind on the gusts, glass
+ *  chimes, a warm pad that follows the day, a hit on each noon cut,
+ *  silence at noon, stars switching on, a bell for the moon. 96 BPM in
+ *  D. Three cycles are rendered and the middle one kept.
+ * ------------------------------------------------------------------ */
+async function renderAudio() {
+  const SR = 48000, CYCLES = 3, LEN = SR * L * CYCLES;
+  const ac = new OfflineAudioContext({ numberOfChannels: 2, length: LEN, sampleRate: SR });
+  const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
+  const noise = ac.createBuffer(2, SR * 10, SR);
+  { const r = rng(3); for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1; } }
+
+  const out = ac.createGain(); out.gain.value = 1.35;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 2.5; comp.attack.value = .01; comp.release.value = .25;
+  const limit = ac.createDynamicsCompressor();
+  limit.threshold.value = -10; limit.knee.value = 0; limit.ratio.value = 12; limit.attack.value = .002; limit.release.value = .12;
+  const hold = ac.createGain();                            // the noon hold: everything drops out
+  out.connect(hold); hold.connect(comp); comp.connect(limit); limit.connect(ac.destination);
+  const ir = ac.createBuffer(2, SR * 3.2, SR);
+  { const r = rng(5); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * Math.pow(1 - i / d.length, 3.2); } }
+  const verb = ac.createConvolver(); verb.buffer = ir;
+  const verbOut = ac.createGain(); verbOut.gain.value = .5; verb.connect(verbOut); verbOut.connect(out);
+  const delay = ac.createDelay(2); delay.delayTime.value = BEAT * .75;
+  const fb = ac.createGain(); fb.gain.value = .32;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 3000;
+  delay.connect(dlp); dlp.connect(fb); fb.connect(delay);
+  const delOut = ac.createGain(); delOut.gain.value = .28; dlp.connect(delOut); delOut.connect(out);
+
+  const filt = (type, f, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); };
+  const sendTo = (node, dest, amt) => { const g = ac.createGain(); g.gain.value = amt; node.connect(g); g.connect(dest); };
+  const panned = (node, p, dest = out) => { const pn = ac.createStereoPanner(); pn.pan.value = p; node.connect(pn); pn.connect(dest); return pn; };
+  const nsrc = (off = 0) => { const s = ac.createBufferSource(); s.buffer = noise; s.loop = true; return s; };
+
+  function bell(t, n, v, p, dec = 1.4) {
+    const f = NOTE(n), g = ac.createGain(); env(g, t, .003, v, dec);
+    for (const [ratio, amp, d] of [[1, 1, dec], [2.76, .3, dec * .45], [5.4, .1, dec * .22]]) {
+      const o = ac.createOscillator(); o.frequency.value = f * ratio;
+      const og = ac.createGain(); env(og, t, .002, amp, d); o.connect(og); og.connect(g); o.start(t); o.stop(t + d + .05);
+    }
+    panned(g, p); sendTo(g, verb, .55); sendTo(g, delay, .35);
+  }
+  function glass(t, n, v, p) {                             // a small glass tink
+    const o = ac.createOscillator(); o.frequency.value = NOTE(n);
+    const o2 = ac.createOscillator(); o2.frequency.value = NOTE(n) * 3.98;
+    const g = ac.createGain(); env(g, t, .001, v, .5); const g2 = ac.createGain(); env(g2, t, .001, v * .4, .15);
+    o.connect(g); o2.connect(g2); g2.connect(g); panned(g, p); sendTo(g, verb, .6);
+    o.start(t); o2.start(t); o.stop(t + .6); o2.stop(t + .2);
+  }
+  function pluck(t, n, v, p) {
+    const f = NOTE(n), o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+    const lp = filt('lowpass', 4000); lp.frequency.setValueAtTime(5000, t); lp.frequency.exponentialRampToValueAtTime(600, t + .3);
+    const g = ac.createGain(); env(g, t, .002, v, .45); o.connect(lp); lp.connect(g); panned(g, p); sendTo(g, verb, .3); sendTo(g, delay, .25);
+    o.start(t); o.stop(t + .5);
+  }
+  function pad(t0, t1, notes, v, bright = 1600) {
+    const lp = filt('lowpass', bright), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t0); g.gain.linearRampToValueAtTime(v, t0 + .5);
+    g.gain.setValueAtTime(v, t1); g.gain.linearRampToValueAtTime(.0001, t1 + 1);
+    lp.connect(g); g.connect(out); sendTo(g, verb, .6);
+    notes.forEach((n, k) => { for (const det of [-7, 7]) {
+      const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = NOTE(n); o.detune.value = det + (k - 2) * 1.5;
+      const og = ac.createGain(); og.gain.value = .5 / notes.length; o.connect(og); og.connect(lp); o.start(t0); o.stop(t1 + 1.1);
+    } });
+  }
+  function hit(t, v) {                                     // noon cut: soft low thump + a click
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(50, t + .12);
+    const g = ac.createGain(); env(g, t, .002, v, .28); o.connect(g); g.connect(out); o.start(t); o.stop(t + .35);
+    const s = nsrc(), hp = filt('highpass', 5000), g2 = ac.createGain(); env(g2, t, .001, v * .25, .03);
+    s.connect(hp); hp.connect(g2); panned(g2, .2); s.start(t, hash(t) * 5); s.stop(t + .05);
+  }
+  function whoosh(t, dur, v, p0, p1, f0 = 300, f1 = 2800) {
+    const s = nsrc(), bp = filt('bandpass', f0, 1.2);
+    bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + dur * .7);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur * .6); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const pn = ac.createStereoPanner(); pn.pan.setValueAtTime(p0, t); pn.pan.linearRampToValueAtTime(p1, t + dur);
+    s.connect(bp); bp.connect(g); g.connect(pn); pn.connect(out); sendTo(g, verb, .25); s.start(t, hash(t * 3) * 5); s.stop(t + dur + .05);
+  }
+  function swell(t, dur, v, f0, f1) {                      // rising filtered noise into a moment
+    const s = nsrc(), bp = filt('bandpass', f0, .8); bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .5);
+    s.connect(bp); bp.connect(g); g.connect(out); sendTo(g, verb, .5); s.start(t, hash(t * 7) * 5); s.stop(t + dur + .6);
+  }
+
+  // continuous beds: the sea (muffled inside the room) and the wind (follows the gusts)
+  const sea = nsrc(), seaLp = filt('lowpass', 900, .5), seaG = ac.createGain(); seaG.gain.value = .0001;
+  sea.connect(seaLp); seaLp.connect(seaG); seaG.connect(out); sea.start(0, 2.3);
+  const wind = nsrc(), windBp = filt('bandpass', 700, .7), windG = ac.createGain(); windG.gain.value = .0001;
+  wind.connect(windBp); windBp.connect(windG); panned(windG, -.2); wind.start(0, 6.1);
+
+  const CH = [[47, 54, 57, 61, 64], [43, 50, 57, 59, 66], [50, 57, 61, 64, 66], [43, 50, 54, 59, 64], [50, 54, 57, 62, 66], [40, 52, 55, 59, 62],
+    [50, 54, 57, 61, 66], [43, 50, 54, 59, 62], [40, 50, 55, 59, 62], [42, 49, 52, 57, 61], [43, 50, 54, 59, 66], [40, 50, 54, 59, 62]];
+  const inside = b => (b > 9 && b < 16) || (b >= 24 && b < 33.6);
+
+  for (let cy = 0; cy < CYCLES; cy++) {
+    const o = cy * L, T = b => o + b * BEAT, r = rng(21);
+    // beds, automated every half beat so they loop exactly
+    for (let k = 0; k <= 96; k++) {
+      const b = k / 2, day = 1 - nightness(hourAt(b)) * .4;
+      const swellK = .5 + .5 * Math.sin(TAU * b / 8 - 1);
+      seaG.gain.linearRampToValueAtTime((inside(b) ? .05 : .13) * (.6 + .4 * swellK) * (b > 22.6 && b < 23.6 ? .15 : 1), T(b));
+      seaLp.frequency.linearRampToValueAtTime(inside(b) ? 520 : 900 + 500 * swellK, T(b));
+      windG.gain.linearRampToValueAtTime(.012 + .075 * clamp(windAt(b) - .2) * day, T(b));
+      windBp.frequency.linearRampToValueAtTime(500 + 900 * clamp(windAt(b) - .2), T(b));
+    }
+    // the hold at noon: a tick, then nothing for a breath
+    hold.gain.setValueAtTime(1, T(22.55)); hold.gain.linearRampToValueAtTime(.0001, T(22.62));
+    hold.gain.setValueAtTime(.0001, T(23.55)); hold.gain.linearRampToValueAtTime(1, T(23.62));
+    glass(T(22.5), 93, .12, 0);
+    // pads follow the day, one chord per bar
+    for (let bar = 0; bar < 12; bar++) {
+      if (bar === 5) { pad(T(20), T(22.5), CH[bar], .03, 1400); continue; }
+      const bright = [900, 1600, 2000, 2000, 2400, 1800, 1900, 1700, 1500, 1100, 900, 900][bar];
+      pad(T(bar * 4), T(bar * 4 + 4), CH[bar], [.026, .03, .03, .03, .028, .03, .032, .034, .036, .03, .026, .026][bar], bright);
+    }
+    // predawn: a few slow bells
+    [[.5, 78, -.3], [2, 74, .3], [3.2, 81, 0]].forEach(([b, n, p]) => bell(T(b), n, .05, p, 2));
+    // sunrise: a swell into a bright chord and rings of bells
+    swell(T(3), 2 * BEAT, .09, 300, 4000);
+    [74, 78, 81, 86, 90].forEach((n, k) => bell(T(5.05) + k * .05, n, .075, (k - 2) * .25, 2.2));
+    [86, 90, 93].forEach((n, k) => glass(T(5.5) + k * .09, n, .06, .4 - k * .3));
+    // morning: marimba-ish plucks on the off-beats; the gust brings the glass chimes
+    const MEL = [78, 81, 83, 86, 85, 81, 83, 78];
+    for (let k = 0; k < 14; k++) { const b = 8.5 + k * .5; if (b > 15.5) break; pluck(T(b), MEL[k % 8] - 12, k % 2 ? .05 : .07, k % 2 ? .35 : -.35); }
+    for (let k = 0; k < 9; k++) glass(T(9.8 + k * .18 + hash(k) * .08), 88 + [0, 5, 2, 9, 7, 12, 4, 14, 9][k], .05, hash(k * 3) - .5);
+    whoosh(T(7.2), 2.4 * BEAT, .08, .6, -.6, 200, 1600);        // pulling back through the window
+    whoosh(T(14.8), 1.2 * BEAT, .09, -.3, .5, 300, 3500);       // into the orb
+    // noon: a hit on every cut, a sparkle for each close-up
+    [16, 17, 18, 19, 19.5, 20, 21].forEach((b, k) => { hit(T(b), b === 19.5 ? .22 : .32); pluck(T(b), [86, 90, 93, 88, 91, 86, 98][k], .06, (k % 2 ? .4 : -.4)); });
+    for (let k = 0; k < 10; k++) glass(T(17 + k * .09), 95 + (k % 4) * 2, .025, hash(k) * 1.6 - .8);
+    swell(T(21), .95 * BEAT, .08, 600, 7000);                   // into the sun and the white flash
+    bell(T(22), 86, .07, 0, 1.2);
+    whoosh(T(23.6), .9 * BEAT, .08, -.5, .5, 400, 3000);        // time runs on
+    // afternoon: warm, slow bells; the lantern clicks on
+    [[24.5, 81, -.2], [26, 78, .2], [27.5, 83, -.1], [29, 81, .25], [30.5, 76, -.25], [32, 78, .1]].forEach(([b, n, p]) => bell(T(b), n, .05, p, 2.2));
+    glass(T(31), 90, .08, -.5); glass(T(31.06), 97, .04, -.5);
+    for (let k = 0; k < 6; k++) glass(T(27 + k * .22 + hash(k * 5) * .1), 86 + [0, 4, 7, 11, 9, 14][k], .035, hash(k * 7) - .5);
+    whoosh(T(32.4), 2 * BEAT, .08, -.4, .6, 250, 2200);         // out through the window
+    // sunset: a swell and a low bloom as the sun goes under
+    swell(T(33.5), 1.85 * BEAT, .08, 200, 1800);
+    { const oo = ac.createOscillator(); oo.frequency.setValueAtTime(NOTE(38), T(35.35)); const g = ac.createGain(); env(g, T(35.35), .02, .16, 2.5); oo.connect(g); g.connect(out); sendTo(g, verb, .5); oo.start(T(35.35)); oo.stop(T(35.35) + 2.6); }
+    [81, 78, 74, 71].forEach((n, k) => bell(T(35.5) + k * .16, n, .05, .3 - k * .2, 1.6));
+    // night: stars switching on, the moon's bell, a shooting star, music-box notes
+    for (let k = 0; k < 16; k++) glass(T(36.2 + k * .12 + hash(k * 9) * .08), 93 + [0, 5, 9, 12, 7, 14, 4, 16][k % 8], .03, hash(k * 13) * 1.6 - .8);
+    bell(T(38.7), 74, .08, -.4, 2.6); bell(T(38.72), 81, .05, -.4, 2.6);
+    { const oo = ac.createOscillator(); oo.frequency.setValueAtTime(NOTE(98), T(42.6)); oo.frequency.exponentialRampToValueAtTime(NOTE(86), T(43.3)); const g = ac.createGain(); env(g, T(42.6), .05, .04, .7); oo.connect(g); panned(g, .3); sendTo(g, verb, .8); oo.start(T(42.6)); oo.stop(T(43.5)); }
+    const BOX = [86, 90, 93, 90, 88, 85, 81, 83];
+    for (let k = 0; k < 8; k++) pluck(T(40.5 + k), BOX[k], .035, k % 2 ? .3 : -.3);
+  }
+
+  const full = await ac.startRendering();
+  const buf = new AudioBuffer({ numberOfChannels: 2, length: SR * L, sampleRate: SR });
+  for (let ch = 0; ch < 2; ch++) buf.copyToChannel(full.getChannelData(ch).subarray(SR * L, SR * L * 2), ch);
+  return buf;
+}
+window.__audio = async () => {
+  const buf = await renderAudio();
+  const a = buf.getChannelData(0), b = buf.getChannelData(1), n = a.length;
+  let peak = 0, sum = 0;
+  for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i]), Math.abs(b[i])); sum += a[i] * a[i] + b[i] * b[i]; }
+  const g = peak > 0 ? .84 / peak : 1;
+  const pcm = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { pcm[2 * i] = clamp(a[i] * g, -1, 1) * 32767; pcm[2 * i + 1] = clamp(b[i] * g, -1, 1) * 32767; }
+  const bytes = new Uint8Array(pcm.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)) };
+};
+if (RENDER) return;
+
+/* ------------------------------------------------------------------ *
+ *  Live player
+ * ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const pp = $('pp'), big = $('big'), scrub = $('scrub'), tcEl = $('tc');
+let playing = false, t = 0, clock0 = 0, raf = 0, actx = null, srcNode = null, audioBuf = null;
+const audioReady = renderAudio().then(b => { audioBuf = b; }).catch(() => { audioBuf = null; });
+const clockStr = h => { const hh = ((h % 24) + 24) % 24; return `${String(Math.floor(hh)).padStart(2, '0')}:${String(Math.floor(frac(hh) * 60)).padStart(2, '0')}`; };
+function draw() {
+  const fi = Math.floor((((t % L) + L) % L) * FPS) % FRAMES;
+  renderFrame(fi, 1);
+  scrub.value = fi;
+  tcEl.textContent = `${(fi / FPS).toFixed(2).padStart(5, '0')} s · ${clockStr(hourAt(fi / FPS / BEAT))}`;
+}
+const now = () => (actx && srcNode) ? actx.currentTime : performance.now() / 1000;
+function tick() { t = now() - clock0; draw(); raf = requestAnimationFrame(tick); }
+async function play() {
+  if (playing) return;
+  playing = true; big.hidden = true; pp.textContent = 'Pause';
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); await audioReady; } catch (e) { /* silent playback */ }
+  if (!playing) return;
+  const off = ((t % L) + L) % L;
+  if (actx && audioBuf) {
+    srcNode = actx.createBufferSource(); srcNode.buffer = audioBuf; srcNode.loop = true; srcNode.connect(actx.destination);
+    srcNode.start(0, off); clock0 = actx.currentTime - off;
+  } else { srcNode = null; clock0 = performance.now() / 1000 - off; }
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+}
+function stop() {
+  playing = false; pp.textContent = 'Play'; big.hidden = false; cancelAnimationFrame(raf);
+  if (srcNode) { try { srcNode.stop(); } catch (e) {} srcNode.disconnect(); srcNode = null; }
+}
+pp.addEventListener('click', () => playing ? stop() : play());
+big.addEventListener('click', play);
+scrub.addEventListener('input', () => { stop(); t = +scrub.value / FPS; draw(); });
+draw();
+})();
+</script>
