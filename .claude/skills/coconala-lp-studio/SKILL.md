@@ -15,10 +15,10 @@ the procedure. If the two disagree, the spec wins, and you flag the mismatch in 
   「ココナラに再ログインしてください」 at the top of 要判断.
 - Read the last entries of `docs/ops-log.md` and the newest file in `docs/reports/`, so you know
   open deals and promised deadlines. List the files you actually read in the report.
-- Check the auto-send status: `docs/spec.md` §5. Until Coconala's answer to
-  `docs/coconala/inquiry-to-coconala.md` is recorded as allowed, follow the interim rule the owner
-  chose (recorded in spec §5). If no rule is recorded yet, draft replies, save them in the report,
-  and do not press send.
+- Check the auto-send status in `docs/spec.md` §5. The owner chose B: Claude sends replies from
+  the start, without waiting for Coconala's answer to `docs/coconala/inquiry-to-coconala.md`. Make
+  sure that inquiry has been sent (first run). Stop sending, and report it first, if Coconala
+  answers "not allowed" or shows any warning, restriction or policy notice.
 
 ## 1. Inbox run (scheduled, several times a day)
 1. Open the Coconala message, talk room, 見積り相談 and notification pages. Collect new items.
