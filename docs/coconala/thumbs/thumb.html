@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>thumbnail</title>
+<!-- Coconala listing thumbnail. Render at 1220x1240. Add #monitor for listing B. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#fbf6ee;--card:#fff;--ink:#2f2a26;--sub:#6b625a;--green:#3f7a5c;--green-d:#2e5c45;--peach:#f2c9a8;--line:#e8dccb;--sun:#f4b860}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1220px;height:1240px;overflow:hidden}
+  body{font-family:"Zen Maru Gothic",sans-serif;background:var(--paper);color:var(--ink);position:relative}
+  .frame{position:absolute;inset:36px;border:4px solid var(--ink);border-radius:48px;background:var(--paper);overflow:hidden}
+  .tag{position:absolute;left:72px;top:70px;font-size:40px;font-weight:700;background:var(--card);border:4px solid var(--ink);border-radius:999px;padding:10px 34px}
+  h1{position:absolute;left:72px;top:176px;font-size:124px;line-height:1.18;font-weight:900;letter-spacing:-.01em}
+  h1 em{font-style:normal;background:linear-gradient(transparent 60%,var(--peach) 60%)}
+  .sub{position:absolute;left:76px;top:500px;font-size:46px;font-weight:700;color:var(--sub);line-height:1.5}
+  .chips{position:absolute;left:72px;top:690px;display:flex;flex-direction:column;gap:22px}
+  .chip{display:flex;align-items:baseline;gap:18px;background:var(--card);border:4px solid var(--ink);border-radius:28px;padding:14px 34px;width:560px}
+  .chip b{font-size:66px;font-weight:900;color:var(--green)}
+  .chip span{font-size:42px;font-weight:700}
+  .phone{position:absolute;right:70px;top:670px;width:360px;height:560px;background:var(--card);border:5px solid var(--ink);border-radius:56px;padding:46px 30px 30px;transform:rotate(4deg)}
+  .phone::before{content:"";position:absolute;top:18px;left:50%;width:90px;height:10px;border-radius:9px;background:var(--ink);transform:translateX(-50%)}
+  .blk{border-radius:16px;background:var(--line);margin-bottom:18px}
+  .b1{height:150px;background:var(--peach)}
+  .b2{height:26px;width:85%}
+  .b3{height:26px;width:62%}
+  .b4{height:120px}
+  .btn{height:70px;border-radius:999px;background:var(--green);margin-top:26px}
+  .ribbon{display:none;position:absolute;right:-6px;top:56px;background:var(--green);color:#fff;font-size:50px;font-weight:900;padding:18px 44px 18px 56px;border-radius:999px 0 0 999px;border:4px solid var(--ink);border-right:none}
+  body.monitor .ribbon{display:block}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tag">講師・コーチ・教室の方へ</div>
+  <div class="ribbon">モニター先着3名</div>
+  <h1>体験申込<em>LP</em>を、<br>通話なしで。</h1>
+  <p class="sub">質問15問に答えるだけ。<br>文章づくりからお任せください。</p>
+  <div class="chips">
+    <div class="chip"><b>72時間</b><span>で初稿</span></div>
+    <div class="chip"><b>修正2回</b><span>込み</span></div>
+    <div class="chip"><b>スマホ</b><span>最優先の設計</span></div>
+  </div>
+  <div class="phone" aria-hidden="true">
+    <div class="blk b1"></div><div class="blk b2"></div><div class="blk b3"></div><div class="blk b4"></div><div class="blk b2"></div><div class="btn"></div>
+  </div>
+</div>
+<script>
+  if (location.hash === "#monitor") document.body.classList.add("monitor");
+</script>
+</body>
+</html>
