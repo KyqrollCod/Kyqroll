@@ -1,5 +1,11 @@
 # Working notes for Claude
 
+## Business: Coconala LP studio (adopted 2026-11-16)
+- Spec: `docs/spec.md` (single source). Procedure: `.claude/skills/coconala-lp-studio/SKILL.md`.
+- The owner delegated listing publication and buyer replies to Claude. Reading the periodic
+  reports counts as confirmation. Refunds, discounts, paid actions and account settings still wait
+  for the owner's answer (spec §4). Never move buyers off Coconala. No changes outside the request.
+
 ## Git workflow preference
 - The user doesn't handle git. After pushing learning or skill changes, open the PR, mark it ready
   and merge it yourself, then tell the user it's done.

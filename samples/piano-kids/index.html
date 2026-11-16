@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>おとのは ピアノ教室｜体験レッスン受付中（制作サンプル）</title>
+<meta name="description" content="4歳から小学生のためのピアノ教室。練習しなさいと言わなくていい、家で弾きたくなるレッスン。（架空の教室による制作サンプルです）">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#fbf6ee; --card:#ffffff; --ink:#2f2a26; --sub:#6b625a;
+    --green:#3f7a5c; --green-d:#2e5c45; --peach:#f2c9a8; --line:#e8dccb;
+    --r:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  h1,h2,h3,.band,.persona,.answer,.lead,.habit{word-break:auto-phrase;text-wrap:balance}
+  html{scroll-behavior:smooth}
+  body{font-family:"Zen Maru Gothic",system-ui,sans-serif;background:var(--paper);color:var(--ink);line-height:1.85;font-weight:500;font-size:16px}
+  img,svg{display:block;max-width:100%}
+  a{color:inherit}
+  .sample{background:var(--ink);color:#fff;font-size:12px;text-align:center;padding:6px 16px;letter-spacing:.04em}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:960px;margin:0 auto}
+  .logo{font-weight:900;font-size:18px;display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo svg{width:26px;height:26px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;border-radius:999px;padding:14px 26px;transition:background .2s}
+  .btn:hover{background:var(--green-d)}
+  .btn.small{padding:9px 16px;font-size:14px}
+  .hero{padding:28px 0 0}
+  .hero .wrap{display:grid;gap:28px}
+  .eyebrow{display:inline-block;background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:4px 14px;font-size:13px;color:var(--sub)}
+  h1{font-size:clamp(28px,7.4vw,46px);line-height:1.4;font-weight:900;margin:14px 0 14px;letter-spacing:.01em}
+  h1 em{font-style:normal;background:linear-gradient(transparent 62%,var(--peach) 62%)}
+  .lead{color:var(--sub);margin-bottom:22px}
+  .hero-note{font-size:13px;color:var(--sub);margin-top:10px}
+  .hero-art{background:var(--card);border-radius:28px;border:1.5px solid var(--line);padding:22px;position:relative;overflow:hidden}
+  .keys{display:grid;grid-template-columns:repeat(7,1fr);height:120px;border-radius:10px;overflow:hidden;border:2px solid var(--ink);position:relative;margin-top:14px}
+  .keys span{border-right:2px solid var(--ink);background:#fff}
+  .keys span:last-child{border-right:0}
+  .keys i{position:absolute;top:0;width:9%;height:62%;background:var(--ink);border-radius:0 0 4px 4px}
+  .art-caption{font-size:14px;color:var(--sub);margin-top:12px}
+  .notes{display:flex;gap:10px;color:var(--green)}
+  .notes svg{width:34px;height:34px}
+  section{padding:64px 0}
+  .sec-title{font-size:clamp(22px,5.6vw,30px);font-weight:900;line-height:1.5;margin-bottom:24px;text-align:center}
+  .sec-title small{display:block;font-size:13px;color:var(--green);letter-spacing:.12em;font-weight:700}
+  .worries{display:grid;gap:12px}
+  .worry{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);padding:16px 18px 16px 52px;position:relative}
+  .worry::before{content:"";position:absolute;left:18px;top:21px;width:18px;height:18px;border-radius:50%;border:2px solid var(--green)}
+  .answer{text-align:center;margin-top:26px;font-weight:700;font-size:18px}
+  .features{display:grid;gap:16px}
+  .feature{background:var(--card);border-radius:var(--r);padding:24px;border:1.5px solid var(--line)}
+  .feature .num{font-size:13px;font-weight:900;color:#fff;background:var(--green);display:inline-block;border-radius:8px;padding:2px 10px;margin-bottom:10px}
+  .feature h3{font-size:19px;line-height:1.5;margin-bottom:8px}
+  .feature p{color:var(--sub);font-size:15px}
+  .band{background:#eef3ee}
+  .flow{display:grid;gap:0;counter-reset:f;max-width:620px;margin:0 auto}
+  .flow li{list-style:none;position:relative;padding:0 0 26px 58px}
+  .flow li::before{counter-increment:f;content:counter(f);position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;background:var(--card);border:2px solid var(--green);color:var(--green);font-weight:900;display:grid;place-items:center}
+  .flow li::after{content:"";position:absolute;left:19px;top:42px;bottom:4px;border-left:2px dashed var(--line)}
+  .flow li:last-child::after{display:none}
+  .flow b{display:block;font-size:17px}
+  .flow span{color:var(--sub);font-size:15px}
+  .teacher{display:grid;gap:22px;background:var(--card);border-radius:28px;border:1.5px solid var(--line);padding:26px}
+  .avatar{width:120px;height:120px;border-radius:50%;background:var(--peach);display:grid;place-items:center;font-size:13px;color:var(--ink);text-align:center;line-height:1.4;margin:0 auto}
+  .teacher h3{font-size:20px}
+  .teacher .role{color:var(--green);font-size:14px;font-weight:700}
+  .teacher p{color:var(--sub);font-size:15px;margin-top:10px}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:var(--r);overflow:hidden;border:1.5px solid var(--line)}
+  th,td{padding:14px 16px;text-align:left;border-bottom:1.5px solid var(--line);font-size:15px}
+  tr:last-child th,tr:last-child td{border-bottom:0}
+  th{width:42%;background:#f7f1e7;font-weight:700}
+  td b{font-size:18px}
+  .price-note{font-size:13px;color:var(--sub);margin-top:10px}
+  .trial{background:var(--green);color:#fff;border-radius:28px;padding:30px 24px;text-align:center;margin-top:28px}
+  .trial h3{font-size:22px;line-height:1.5}
+  .trial p{opacity:.9;margin:8px 0 18px;font-size:15px}
+  .trial .btn{background:#fff;color:var(--green-d)}
+  .faq details{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);margin-bottom:10px;padding:0 18px}
+  .faq summary{cursor:pointer;font-weight:700;padding:16px 0;list-style:none;position:relative;padding-right:28px}
+  .faq summary::after{content:"+";position:absolute;right:0;top:12px;font-size:22px;color:var(--green)}
+  .faq details[open] summary::after{content:"−"}
+  .faq details p{color:var(--sub);padding-bottom:16px;font-size:15px}
+  .cta-end{text-align:center}
+  .cta-end p{color:var(--sub);margin:10px 0 22px}
+  footer{text-align:center;font-size:12px;color:var(--sub);padding:28px 20px 96px}
+  .sticky{position:fixed;left:12px;right:12px;bottom:12px;z-index:10;box-shadow:0 6px 18px rgba(47,42,38,.18)}
+  .sticky .btn{width:100%}
+  @media (min-width:768px){
+    .hero .wrap{grid-template-columns:1.1fr .9fr;align-items:center}
+    .features{grid-template-columns:repeat(3,1fr)}
+    .worries{grid-template-columns:repeat(3,1fr)}
+    .teacher{grid-template-columns:160px 1fr;align-items:center}
+    .sticky{display:none}
+    footer{padding-bottom:28px}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+</style>
+</head>
+<body>
+<div class="sample">制作サンプルです。教室・講師・料金はすべて架空のものです。</div>
+
+<header>
+  <a class="logo" href="#">
+    <svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="#3f7a5c"/><path d="M10 18.5a2.6 2.1 0 1 1 0-.1V8l7-1.6v8.6a2.6 2.1 0 1 1 0-.1V9.6L11.4 11v7.5" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    おとのは ピアノ教室
+  </a>
+  <a class="btn small" href="#trial">体験予約</a>
+</header>
+
+<main>
+  <section class="hero" style="padding-top:28px">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">4歳〜小学生｜〇〇市・〇〇駅から徒歩6分</span>
+        <h1>「練習しなさい」を<br><em>言わなくていい</em><br>ピアノ教室です。</h1>
+        <p class="lead">弾ける曲がすぐ増えるから、子どもが自分からピアノに向かう。1回30分、まずは親子で体験してみてください。</p>
+        <a class="btn" href="#trial">体験レッスンを予約する（1,000円）</a>
+        <p class="hero-note">体験のあとに入会をおすすめすることはありません。</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="notes">
+          <svg viewBox="0 0 34 34"><path d="M12 25a4 3.2 0 1 1 0-.1V8l13-3v15a4 3.2 0 1 1 0-.1V10l-10 2.3V25" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 34 34"><path d="M15 25a4 3.2 0 1 1 0-.1V6c3 2 7 3 8 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="keys">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <i style="left:10%"></i><i style="left:24.4%"></i><i style="left:53%"></i><i style="left:67.4%"></i><i style="left:81.6%"></i>
+        </div>
+        <p class="art-caption">はじめの3回で「好きな曲のサビ」を両手で弾けるようにします。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2 class="sec-title"><small>こんなお悩みはありませんか</small>習いごと、続くか心配ですよね</h2>
+      <div class="worries">
+        <p class="worry">家で練習しない。毎日「練習した？」と言うのがつらい</p>
+        <p class="worry">楽譜が読めないまま、なんとなく続けてしまっている</p>
+        <p class="worry">発表会の前だけ親子でピリピリしてしまう</p>
+      </div>
+      <p class="answer">おとのはは、この3つを減らすためのレッスンをしています。</p>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 class="sec-title"><small>3つの特徴</small>自分から弾きたくなる仕組み</h2>
+      <div class="features">
+        <article class="feature">
+          <span class="num">01</span>
+          <h3>最初の曲は、子どもが選ぶ</h3>
+          <p>教本の順番より「弾きたい曲」を優先します。アニメの曲でも大丈夫。やさしい編曲を毎回用意します。</p>
+        </article>
+        <article class="feature">
+          <span class="num">02</span>
+          <h3>家での練習は1日5分だけ</h3>
+          <p>レッスンの最後に「今週の5分メニュー」をシールで渡します。終わったら貼るだけなので、声かけはいりません。</p>
+        </article>
+        <article class="feature">
+          <span class="num">03</span>
+          <h3>楽譜はゲームで覚える</h3>
+          <p>カードとリズム遊びで、ドレミを読む力を少しずつ。気づいたら楽譜を見て弾けるようになります。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2 class="sec-title"><small>レッスンの流れ</small>1回30分、こんなふうに進みます</h2>
+      <ol class="flow">
+        <li><b>リズム遊び（5分）</b><span>手拍子やカードで、体をほぐしながらリズムを覚えます。</span></li>
+        <li><b>今日の曲（15分）</b><span>選んだ曲を少しずつ。できたところを毎回ことばにして伝えます。</span></li>
+        <li><b>楽譜ゲーム（5分）</b><span>音符カードで読譜の練習。正解するとスタンプがたまります。</span></li>
+        <li><b>5分メニューを渡す（5分）</b><span>保護者の方にも、今日できたことを1分でお伝えします。</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 class="sec-title"><small>講師紹介</small>はじめまして</h2>
+      <div class="teacher">
+        <div class="avatar">講師の<br>写真が<br>入ります</div>
+        <div>
+          <p class="role">主宰・講師</p>
+          <h3>おとのは 花子（架空）</h3>
+          <p>音楽大学ピアノ科を卒業後、〇年間子どものレッスンを担当。「上手に弾く」より先に「弾くのが好き」を育てたいと思い、この教室を開きました。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="price">
+    <div class="wrap">
+      <h2 class="sec-title"><small>料金</small>わかりやすい月謝制です</h2>
+      <table>
+        <tr><th>入会金</th><td><b>0円</b></td></tr>
+        <tr><th>月謝（月3回・30分）</th><td><b>7,700円</b>（税込）</td></tr>
+        <tr><th>月謝（月3回・45分）</th><td><b>9,900円</b>（税込）</td></tr>
+        <tr><th>振替</th><td>前日までの連絡で月内に振替できます</td></tr>
+      </table>
+      <p class="price-note">教材費は実費です。発表会への参加は自由です。</p>
+
+      <div class="trial" id="trial">
+        <h3>体験レッスン 30分 1,000円</h3>
+        <p>保護者の方も一緒にどうぞ。平日15〜19時、土曜10〜16時。</p>
+        <a class="btn" href="#trial">LINEで体験を予約する</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq band">
+    <div class="wrap" style="max-width:720px">
+      <h2 class="sec-title"><small>よくある質問</small>ご質問</h2>
+      <details><summary>家にピアノがなくても大丈夫ですか？</summary><p>はじめは電子キーボードで大丈夫です。続けられそうだと思ってから、楽器を一緒に考えましょう。</p></details>
+      <details><summary>何歳から通えますか？</summary><p>4歳から受け付けています。ひらがなが読めなくても大丈夫です。</p></details>
+      <details><summary>きょうだいで通えますか？</summary><p>続けての時間でご予約いただけます。待っている間は教室で過ごせます。</p></details>
+      <details><summary>駐車場はありますか？</summary><p>教室の前に1台分あります。ご予約の際にお知らせください。</p></details>
+    </div>
+  </section>
+
+  <section class="cta-end">
+    <div class="wrap">
+      <h2 class="sec-title">まずは30分、<br>音を出してみませんか</h2>
+      <p>体験のあとに、通うかどうかをゆっくり決めてください。</p>
+      <a class="btn" href="#trial">体験レッスンを予約する</a>
+    </div>
+  </section>
+</main>
+
+<footer>おとのは ピアノ教室（架空）｜〇〇市〇〇町1-2-3<br>このページはLP制作の見本として作成したもので、実在の教室ではありません。</footer>
+<div class="sticky"><a class="btn" href="#trial">体験レッスンを予約する（1,000円）</a></div>
+</body>
+</html>
