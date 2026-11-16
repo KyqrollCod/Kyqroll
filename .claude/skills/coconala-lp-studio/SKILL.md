@@ -21,6 +21,17 @@ the procedure. If the two disagree, the spec wins, and you flag the mismatch in 
   first, if Coconala shows any warning, restriction or policy notice. When the §5 re-judge trigger
   is met, put "A/B 再判定" at the top of 要判断 in that weekly report.
 
+## First run (once)
+1. Check that you can control the owner's Chrome and that coconala.com shows the owner logged in.
+2. Inventory the existing account and log the gist (spec §5b): listings and their status, profile,
+   unanswered messages, open deals. Handle any open deal or unanswered buyer first.
+3. Tidy: set old off-target listings to private (never delete). Rewrite the profile from
+   `docs/coconala/profile.md`. Keep the display name and icon if the account has reviews.
+4. Publish listing B (monitor) and A (standard) from `docs/coconala/listings.md`, with thumbnails
+   and the `samples/` LPs as portfolio images. Copy the live text back into the repo files, and
+   resolve the 要確認 items in spec §3 (file types, size, text limits).
+5. Try one inbox run by hand, then set the scheduled runs (spec §6) and write the first report.
+
 ## 1. Inbox run (scheduled, several times a day)
 1. Open the Coconala message, talk room, 見積り相談 and notification pages. Collect new items.
 2. Classify each item: inquiry (target / non-target industry) · hearing answers · revision request ·
