@@ -1,8 +1,9 @@
 """Screenshot an LP at phone (390x844) and PC (1280x800) widths, full page.
-Usage: python scripts/shot.py <path/to/index.html> <out_dir>"""
+Usage: python scripts/shot.py <path/to/index.html | https://url> <out_dir>"""
 import sys, pathlib
 from playwright.sync_api import sync_playwright
-src = pathlib.Path(sys.argv[1]).resolve().as_uri()
+arg = sys.argv[1]
+src = arg if arg.startswith(("http://", "https://")) else pathlib.Path(arg).resolve().as_uri()
 out = pathlib.Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     b = p.chromium.launch()

@@ -77,6 +77,21 @@ Work in `deliveries/<deal-id>/` on the owner's PC. The folder is git-ignored, so
    adapted with the buyer's site name and checked against the live Netlify screens), and
    screenshots. Use Coconala's 納品 flow.
 
+## 2b. Diagnosis report (3,000円 listing D, spec §2)
+Deliver within 3 days; aim for the same day. Work in `deliveries/<deal-id>/` (git-ignored).
+1. From the talk room, take the page URL and the main goal (体験 / 無料相談 …). If the page needs a login
+   or is in a non-target industry (spec §1), say so politely and report it (cancel/refund is 要判断).
+2. `python scripts/shot.py <url> deliveries/<deal-id>/shots` → `sp.png` (390px) and `pc.png` (1280px),
+   full page. Also read the page text (Chrome get_page_text or WebFetch).
+3. Write 10 improvements, most important first. Each: what you saw (quote the exact heading/button text),
+   why it hurts sign-ups, how to fix it (a concrete rewrite or layout change). Only what is on the page;
+   no invented numbers, no guarantees, no legal/medical judgements.
+4. Mark the problem spots on the screenshots (red circles + numbers matching the list), build an HTML
+   report and print it to PDF with Playwright (`page.pdf`). Check the PDF yourself.
+5. Deliver the PDF through Coconala's 納品 flow with a short message from `docs/coconala/replies.md`.
+   Mention the LP制作 listing once at the end, without pressure.
+6. Log deal ID, type 診断, delivered time in `docs/ops-log.md`.
+
 ## 3. Listings
 - Source text: `docs/coconala/listings.md`. When you publish or edit a listing, copy the exact
   live text back into that file and log it.
