@@ -1,0 +1,31 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>ページ診断レポート（見本）</title>
+<style>
+@page{size:A4;margin:14mm 12mm}
+*{box-sizing:border-box}
+body{font-family:"Noto Sans JP","Yu Gothic","Meiryo",sans-serif;color:#2f2a26;font-size:10.5pt;line-height:1.7;margin:0}
+h1{font-size:20pt;margin:0 0 4mm}
+.meta{color:#6b625a;margin-bottom:6mm}
+.summary{background:#fbf6ee;border:1px solid #e8dccb;border-radius:3mm;padding:4mm 5mm;margin-bottom:6mm}
+.item{break-inside:avoid;border-left:2mm solid #3f7a5c;padding:1mm 0 1mm 4mm;margin:0 0 5mm}
+.item h2{font-size:12.5pt;margin:0 0 1mm}
+.num{display:inline-block;width:7mm;height:7mm;border-radius:50%;background:#c8553d;color:#fff;text-align:center;
+     line-height:7mm;font-size:10pt;margin-right:2mm}
+.lbl{font-weight:700;color:#3f7a5c}
+.slice{break-before:page;break-inside:avoid}
+.shot{position:relative;margin:0 auto;border:1px solid #ccc}
+.shot img{display:block;max-width:none}
+.mark{position:absolute;border:3px solid #c8553d;border-radius:8px}
+.mark span{position:absolute;left:-12px;top:-12px;width:24px;height:24px;border-radius:50%;background:#c8553d;
+           color:#fff;font-size:13px;font-weight:700;text-align:center;line-height:24px}
+.cap{font-weight:700;margin:2mm 0}
+.foot{color:#6b625a;font-size:9pt;margin-top:6mm}
+</style></head><body>
+<h1>ページ診断レポート（見本）</h1>
+<div class="meta">みどり書道教室 様（架空の教室・見本）　対象ページ：見本用の架空ページ</div>
+<div class="summary">改善点を、申込への影響が大きい順に10個まとめました。番号は、後半の画面画像の印と対応しています。
+上から順に直すと、少ない手間で効果が出やすくなります。</div>
+<div class="item"><h2><span class="num">1</span>最初の画面で「何が学べて、誰向けか」が伝わらない</h2><div><span class="lbl">なぜ：</span>スマホで最初に見えるのは教室名と「Since 2008」だけです。初めて来た人は、ここで自分に合う教室か判断できず、読むのをやめてしまいます。</div><div><span class="lbl">どう直す：</span>教室名の下に一言を足します。例：「大人も子どもも、ていねいな字が書けるようになる書道教室｜○○駅徒歩5分」。その下に「無料体験を予約する」ボタンを置きます。</div></div><div class="item"><h2><span class="num">2</span>申込の入口が最後の小さな文字リンク1つだけ</h2><div><span class="lbl">なぜ：</span>申込につながる要素がページの一番下、12pxの「お問い合わせはこちら」だけです。スマホでは押しにくく、途中で興味を持った人の行き場がありません。リンク先も設定されていません。</div><div><span class="lbl">どう直す：</span>幅いっぱいの大きなボタン（高さ48px以上）に変え、最初の画面・料金の下・ページ末尾の3か所に置きます。文言は「無料体験を予約する」など、押した後に起きることが分かるものにします。</div></div><div class="item"><h2><span class="num">3</span>料金が載っていない</h2><div><span class="lbl">なぜ：</span>「月謝は教室でお伝えしています」とあると、問い合わせる前に不安が残り、比べている他の教室へ移りやすくなります。</div><div><span class="lbl">どう直す：</span>クラスごとの月謝・入会金・教材費を表に入れます。幅がある場合は「月謝 ○円〜」でも構いません。</div></div><div class="item"><h2><span class="num">4</span>スマホでごあいさつの文章が細い帯になっている</h2><div><span class="lbl">なぜ：</span>写真と文章が横並びのまま縮むため、文章が幅90pxの細い帯になり、1行に数文字しか入りません。スマホでは読めない状態です。</div><div><span class="lbl">どう直す：</span>スマホ幅（例：600px以下）では写真を上、文章を下の縦並びにします。CSSの .greeting に flex-direction: column を指定します。</div></div><div class="item"><h2><span class="num">5</span>体験の流れが書かれていない</h2><div><span class="lbl">なぜ：</span>「お気軽にお問い合わせください」だけでは、申し込んだ後に何が起きるか分からず、一歩目が重くなります。</div><div><span class="lbl">どう直す：</span>「1. フォームで予約 → 2. 確認の連絡 → 3. 体験（60分・道具は貸し出し）」のように3〜4段階で示します。</div></div><div class="item"><h2><span class="num">6</span>講師の写真と経歴がない</h2><div><span class="lbl">なぜ：</span>画像が表示されておらず、誰が教えるのか分かりません。習い事では「どんな先生か」が申込の大きな決め手になります。</div><div><span class="lbl">どう直す：</span>講師の写真（表情が分かるもの）と、資格・指導歴・ひとことを載せます。</div></div><div class="item"><h2><span class="num">7</span>文字が小さく、行間が詰まっている</h2><div><span class="lbl">なぜ：</span>本文が12pxで、スマホでは読むのに疲れます。年配の方も多い習い事では特に不利です。</div><div><span class="lbl">どう直す：</span>本文を16px、行間を1.8程度にします。</div></div><div class="item"><h2><span class="num">8</span>教室の特徴が「月謝制です」などの事実の羅列になっている</h2><div><span class="lbl">なぜ：</span>どの教室にも当てはまる項目だけでは、ここを選ぶ理由になりません。</div><div><span class="lbl">どう直す：</span>生徒にとっての良さに言い換えます。例：「道具の貸し出し」→「手ぶらで体験できます」。「昇段試験」→「目標があるので続けやすい」。</div></div><div class="item"><h2><span class="num">9</span>場所・アクセスが書かれていない</h2><div><span class="lbl">なぜ：</span>通えるかどうかは最初に確認されることです。書かれていないと、それだけで候補から外れます。</div><div><span class="lbl">どう直す：</span>住所・最寄り駅からの徒歩分数・駐車場の有無と、地図を載せます。</div></div><div class="item"><h2><span class="num">10</span>問い合わせ方法がメールだけ</h2><div><span class="lbl">なぜ：</span>メールを書くのは手間がかかり、若い世代ほど避けがちです。</div><div><span class="lbl">どう直す：</span>予約フォーム（Googleフォームなど）か、LINE公式アカウントの友だち追加ボタンを加えます。</div></div>
+<div class="shots"><div class="slice"><div class="cap">スマホ（幅390px）（1/2）</div><div class="shot" style="width:95mm;height:239.9mm;overflow:hidden"><img src="sp.png" style="width:95mm;margin-top:-0.0mm"><div class="mark" style="left:3.4mm;top:3.4mm;width:88.2mm;height:43.8mm"><span>1</span></div><div class="mark" style="left:2.4mm;top:73.1mm;width:90.1mm;height:146.2mm"><span>4</span></div></div></div><div class="slice"><div class="cap">スマホ（幅390px）（2/2）</div><div class="shot" style="width:95mm;height:169.5mm;overflow:hidden"><img src="sp.png" style="width:95mm;margin-top:-239.9mm"><div class="mark" style="left:2.4mm;top:138.8mm;width:34.1mm;height:8.3mm"><span>2</span></div><div class="mark" style="left:2.4mm;top:94.3mm;width:90.1mm;height:8.8mm"><span>3</span></div><div class="mark" style="left:12.2mm;top:13.4mm;width:80.4mm;height:17.5mm"><span>7</span></div></div></div><div class="slice"><div class="cap">PC（幅1280px）</div><div class="shot" style="width:186mm;height:183.4mm;overflow:hidden"><img src="pc.png" style="width:186mm;margin-top:-0.0mm"><div class="mark" style="left:21.8mm;top:154.0mm;width:142.4mm;height:16.0mm"><span>5</span></div><div class="mark" style="left:21.8mm;top:42.1mm;width:37.8mm;height:29.1mm"><span>6</span></div><div class="mark" style="left:21.8mm;top:79.2mm;width:142.4mm;height:30.5mm"><span>8</span></div></div></div></div>
+<div class="foot">このレポートは改善のご提案です。申込数の増加をお約束するものではありません。
+画面の確認・分析・文章の作成に生成AIを活用し、内容を確認したうえでお届けしています。</div>
+</body></html>

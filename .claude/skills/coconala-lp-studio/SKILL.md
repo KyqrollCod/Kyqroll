@@ -81,13 +81,15 @@ Work in `deliveries/<deal-id>/` on the owner's PC. The folder is git-ignored, so
 Deliver within 3 days; aim for the same day. Work in `deliveries/<deal-id>/` (git-ignored).
 1. From the talk room, take the page URL and the main goal (体験 / 無料相談 …). If the page needs a login
    or is in a non-target industry (spec §1), say so politely and report it (cancel/refund is 要判断).
-2. `python scripts/shot.py <url> deliveries/<deal-id>/shots` → `sp.png` (390px) and `pc.png` (1280px),
-   full page. Also read the page text (Chrome get_page_text or WebFetch).
-3. Write 10 improvements, most important first. Each: what you saw (quote the exact heading/button text),
-   why it hurts sign-ups, how to fix it (a concrete rewrite or layout change). Only what is on the page;
-   no invented numbers, no guarantees, no legal/medical judgements.
-4. Mark the problem spots on the screenshots (red circles + numbers matching the list), build an HTML
-   report and print it to PDF with Playwright (`page.pdf`). Check the PDF yourself.
+2. `python scripts/diagnose.py collect <url> deliveries/<deal-id>` → `sp.png`, `pc.png`, `facts.json`
+   (headings, CTA buttons, small text, overflow, prices, with element boxes in screenshot pixels).
+   Look at both screenshots yourself and read `facts.json`.
+3. Write `deliveries/<deal-id>/findings.json`: 10 items, most important first, each
+   `{title, why, how, view: "sp"|"pc", box: [x,y,w,h]}` (box optional). Quote the page's exact wording;
+   only what is on the page; no invented numbers, no guarantees, no legal/medical judgements.
+   Model: `samples/diagnosis-before/report/findings.json`.
+4. `python scripts/diagnose.py render deliveries/<deal-id> --client "<教室名> 様"` → `report.pdf`.
+   Rasterize the pages (PyMuPDF) and check every page yourself: marks on the right spots, no cut text.
 5. Deliver the PDF through Coconala's 納品 flow with a short message from `docs/coconala/replies.md`.
    Mention the LP制作 listing once at the end, without pressure.
 6. Log deal ID, type 診断, delivered time in `docs/ops-log.md`.
