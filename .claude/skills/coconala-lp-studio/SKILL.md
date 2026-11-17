@@ -105,6 +105,7 @@ Deliver within 3 days; aim for the same day. Work in `deliveries/<deal-id>/` (gi
   `docs/reports/YYYY-MM-DD.md`, and end the session with the same text.
 - 要判断 first. Write each item as one decision with its impact and your recommendation.
 - Weekly: numbers from the Coconala dashboard, and the position against spec §8 kill criteria.
+- Weekly: check `docs/decisions.md` D-001 「見直す条件」 and the price ladder (raise listing D at 5 / 10 reviews). Record any new decision there with its evidence.
 - Weekly listing improvement (spec §8b-2): append the week's numbers to `docs/coconala/metrics.md`;
   if the trigger is met, change exactly one element of the listing (thumbnail → title → catch copy →
   opening of the description), copy the live text into `docs/coconala/listings.md`, and note it.
