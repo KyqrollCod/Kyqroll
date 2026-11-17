@@ -41,6 +41,17 @@ the procedure. If the two disagree, the spec wins, and you flag the mismatch in 
    buyer names, contacts or message bodies.
 5. If hearing answers are complete, start §2 for that deal in the same run when time allows.
 
+## 1b. Proposals to public requests (daily, spec §8b-1)
+1. Open 仕事を探す (https://coconala.com/requests) and search the LP / ランディングページ / ホームページ requests,
+   newest first. Skip ones already in `docs/ops-log.md`.
+2. Keep only requests meeting every condition in spec §8b-1 (target industry, one static LP page,
+   budget max ≥ 20,000円, ≥5 days to deadline, nothing off-platform).
+3. Write each proposal from the template in `docs/coconala/replies.md`, rewritten for that request.
+   Price strictly from spec §2. Run the pre-send check. Max 3 per day.
+4. Log one line per proposal (request ID, industry, price, status). Check earlier proposals for
+   replies; a reply from a requester is handled as an inbox item (§1).
+5. Free proposal slots only. If Coconala asks for paid slots or shows a limit, stop and report.
+
 ## 2. Production (per deal)
 Work in `deliveries/<deal-id>/` on the owner's PC. The folder is git-ignored, so buyer content
 (answers, photos, their LP) never leaves that machine through the repo. Never save raw messages.
@@ -79,6 +90,9 @@ Work in `deliveries/<deal-id>/` on the owner's PC. The folder is git-ignored, so
   `docs/reports/YYYY-MM-DD.md`, and end the session with the same text.
 - 要判断 first. Write each item as one decision with its impact and your recommendation.
 - Weekly: numbers from the Coconala dashboard, and the position against spec §8 kill criteria.
+- Weekly listing improvement (spec §8b-2): append the week's numbers to `docs/coconala/metrics.md`;
+  if the trigger is met, change exactly one element of the listing (thumbnail → title → catch copy →
+  opening of the description), copy the live text into `docs/coconala/listings.md`, and note it.
 
 ## 5. Saving work
 Commit reports, ops-log and listing text after each run, push to the working branch, and merge the
