@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>sample report image</title>
+<!-- Listing D image 2: pages of the sample diagnosis report. Render at 1220x1240. -->
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1220px;height:1240px;overflow:hidden}
+  body{font-family:"Zen Maru Gothic",sans-serif;background:#fbf6ee;color:#2f2a26;position:relative}
+  .frame{position:absolute;inset:36px;border:4px solid #2f2a26;border-radius:48px;overflow:hidden}
+  h1{position:absolute;left:70px;top:60px;font-size:64px;font-weight:900}
+  .note{position:absolute;left:72px;top:150px;font-size:32px;font-weight:700;color:#6b625a}
+  .pg{position:absolute;width:520px;border:3px solid #2f2a26;border-radius:10px;background:#fff;box-shadow:10px 12px 0 #e8dccb}
+  .p1{left:70px;top:230px;transform:rotate(-2deg)}
+  .p2{left:470px;top:290px;width:400px;transform:rotate(2deg)}
+  .p3{left:640px;top:520px;width:480px;transform:rotate(-1deg)}
+  .tag{position:absolute;right:70px;bottom:62px;background:#3f7a5c;color:#fff;border-radius:22px;padding:12px 26px;font-size:34px;font-weight:900}
+</style>
+</head>
+<body>
+<div class="frame">
+  <h1>お届けするレポートの見本</h1>
+  <p class="note">架空の教室ページを診断した見本です（PDF・全5ページ）</p>
+  <img class="pg p1" src="sample-report-p1.png">
+  <img class="pg p2" src="sample-report-p3.png">
+  <img class="pg p3" src="sample-report-p5.png">
+  <div class="tag">改善点10個＋画面に印</div>
+</div>
+</body>
+</html>
