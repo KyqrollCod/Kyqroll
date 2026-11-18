@@ -1,0 +1,669 @@
+<meta charset="utf-8">
+<title>Seaglass</title>
+<meta name="description" content="A fifteen-second seamless loop of geometric sea, sky and wind: single motifs and collage bursts cut on the beat, drawn in canvas code with a synthesized 96 BPM soundtrack.">
+<style>
+/* Page: one airy light look, painted explicitly (the piece itself is the colour). */
+:root{
+  color-scheme:light;
+  --ground:#F2FAFE; --panel:#FAFDFF; --line:#CDE8F6; --ink:#17467A; --muted:#5A84AF;
+  --azure:#2E9CF0; --turq:#3BD0E9; --lav:#B8B0F5;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{font:14px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;padding-inline:clamp(16px,4vw,48px);padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px}
+h1{margin:0;font-size:clamp(26px,4.4vw,44px);font-weight:700;letter-spacing:-.01em;line-height:1.1;text-wrap:balance}
+h1 span{color:var(--turq)}
+.meta{margin:0;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.screen{position:relative;aspect-ratio:16/9;max-width:100%;background:#F7FCFF;box-shadow:0 18px 40px -26px rgba(23,70,122,.5)}
+.screen canvas{display:block;width:100%;height:100%}
+.bigplay{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;border:0;background:var(--azure);color:#fff;cursor:pointer;display:grid;place-items:center;transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.bigplay:hover{transform:scale(1.07)}
+.bigplay svg{width:28px;height:28px;margin-left:4px}
+.controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px}
+.pp{min-width:92px;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.pp:hover{border-color:var(--azure)}
+input[type=range]{width:100%;accent-color:var(--azure)}
+.tc{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{margin:0;color:var(--muted);font-size:13px;max-width:68ch}
+:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+@media (max-width:520px){.controls{grid-template-columns:auto 1fr}.tc{grid-column:1/-1}}
+body.render{padding:0;margin:0;background:#000}
+body.render .ui{display:none!important}
+body.render .wrap{max-width:none;display:block}
+body.render .screen{width:1920px;height:1080px;box-shadow:none}
+</style>
+
+<div class="wrap">
+  <header class="ui">
+    <h1>Seaglass<span>.</span></h1>
+    <p class="meta">15 s seamless loop · 96 bpm · 12 scenes × 2 beats · 1920×1080 · 60p</p>
+  </header>
+  <div class="screen">
+    <canvas id="c" width="1920" height="1080" aria-label="Looping animation of geometric shapes that suggest sun, waves, glass, wind and sea"></canvas>
+    <button id="big" class="bigplay ui" type="button" aria-label="Play the loop with sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l16 9-16 9z" fill="currentColor"/></svg></button>
+  </div>
+  <div class="controls ui">
+    <button id="pp" class="pp" type="button">Play</button>
+    <input id="scrub" type="range" min="0" max="899" step="1" value="0" aria-label="Position in the loop">
+    <span id="tc" class="tc">00.00 s · scene 1</span>
+  </div>
+  <p class="note ui">Twelve two-beat scenes cut on the beat, alternating a single motif with a collage burst: sun, beach, wave, sky, ripple, suncatcher, chime, deep water, sail, wind, glint, and back to the sun. Everything is drawn live by the code on this page.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const Q = new URLSearchParams(location.search);
+const RENDER = Q.has('render');
+if (RENDER) document.body.classList.add('render');
+
+const W = 1920, H = 1080, FPS = 60, L = 15, FRAMES = L * FPS;
+const BPM = 96, BEAT = 60 / BPM, BAR = 4 * BEAT;           // 24 beats = 12 scenes of 2 beats = 15 s
+const TAU = Math.PI * 2;
+
+// Same palette as Clear Horizon (from the reference image): white-led, azure, turquoise, deep blue,
+// pale aqua, lavender, and a soft yellow kept for the sun.
+const P = {
+  bg: '#F7FCFF', white: '#FFFFFF', azure: '#2E9CF0', turq: '#3BD0E9', deep: '#1D6FD1', deeper: '#1350B9',
+  aqua: '#A5F0F4', lav: '#B8B0F5', sun: '#FFE58A', pink: '#F7CADD'
+};
+
+/* ------------------------------------------------------------------ *
+ *  Helpers
+ * ------------------------------------------------------------------ */
+const frac = x => x - Math.floor(x);
+const wrapT = t => ((t % L) + L) % L;
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const prog = (a, b, x) => clamp((x - a) / (b - a));
+const inCubic = t => t * t * t;
+const outCubic = t => 1 - Math.pow(1 - t, 3);
+const outExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const inOutCubic = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const outBack = (t, s = 1.9) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
+const pop = (u, t0, d = .24) => { const p = prog(t0, t0 + d, u); return p <= 0 ? 0 : outBack(p); };
+const hash = n => frac(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rgba = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+const pick = (r, list) => { let s = 0; for (const [, w] of list) s += w; let x = r() * s; for (const [v, w] of list) { if ((x -= w) <= 0) return v; } return list[0][0]; };
+
+const main = document.getElementById('c');
+const mctx = main.getContext('2d');
+const SUB = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; })();
+
+/* ------------------------------------------------------------------ *
+ *  Shape vocabulary. Every shape stands for something on the shore:
+ *  circle = sun / bubble, crescent = a wave curling over, gem = sea
+ *  glass, star and plus = glints, triangle = sail, wave = water.
+ * ------------------------------------------------------------------ */
+function circle(c, x, y, r) { if (r <= 0) return; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+function ring(c, x, y, r, w) { if (r <= 0) return; c.lineWidth = w; c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke(); }
+function crescent(c, x, y, r, cut, ang) {
+  if (r <= 0) return;
+  c.save(); c.beginPath(); c.arc(x, y, r, 0, TAU); c.clip();
+  c.beginPath(); c.rect(x - r - 2, y - r - 2, 2 * r + 4, 2 * r + 4);
+  c.arc(x + Math.cos(ang) * r * cut, y + Math.sin(ang) * r * cut, r * .9, 0, TAU);
+  c.fill('evenodd'); c.restore();
+}
+function gem(c, x, y, s, rot, a, b) {                  // faceted sea glass: a diamond split into two tones
+  if (s <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot);
+  c.fillStyle = a; c.beginPath(); c.moveTo(0, -s); c.lineTo(0, s); c.lineTo(-s * .78, 0); c.closePath(); c.fill();
+  c.fillStyle = b; c.beginPath(); c.moveTo(0, -s); c.lineTo(s * .78, 0); c.lineTo(0, s); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.85)'; c.beginPath(); c.moveTo(-s * .18, -s * .5); c.lineTo(0, -s * .72); c.lineTo(s * .18, -s * .5); c.lineTo(0, -s * .28); c.closePath(); c.fill();
+  c.restore();
+}
+function nested(c, x, y, s, rot, cols) {                // concentric diamonds
+  if (s <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot);
+  cols.forEach((col, k) => { const q = s * (1 - k / cols.length); c.fillStyle = col; c.beginPath(); c.moveTo(0, -q); c.lineTo(q, 0); c.lineTo(0, q); c.lineTo(-q, 0); c.closePath(); c.fill(); });
+  c.restore();
+}
+function plus(c, x, y, s, rot) {
+  if (s <= 0) return;
+  const w = s * .34; c.save(); c.translate(x, y); c.rotate(rot);
+  c.beginPath(); c.roundRect(-s, -w / 2, 2 * s, w, w / 2); c.roundRect(-w / 2, -s, w, 2 * s, w / 2); c.fill(); c.restore();
+}
+function star(c, x, y, r, rot = 0, pinch = .16) {
+  if (r <= 0) return;
+  c.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = rot + k * Math.PI / 4 - Math.PI / 2, rr = k % 2 ? r * pinch : r;
+    if (k === 0) c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  c.closePath(); c.fill();
+}
+function tri(c, x, y, s, rot) {
+  if (s <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot);
+  c.beginPath(); c.moveTo(0, -s); c.lineTo(s * .87, s * .5); c.lineTo(-s * .87, s * .5); c.closePath(); c.fill(); c.restore();
+}
+function waveStroke(c, x, y, s, rot, ph) {
+  if (s <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot); c.lineWidth = s * .22; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath();
+  for (let i = 0; i <= 36; i++) { const q = i / 36, px = -s * 1.4 + 2.8 * s * q, py = Math.sin(q * TAU * 1.5 + ph) * s * .26; if (i) c.lineTo(px, py); else c.moveTo(px, py); }
+  c.stroke(); c.restore();
+}
+function dotGrid(c, x, y, s, rot) {
+  if (s <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot); c.beginPath();
+  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) { const px = i * s * .42, py = j * s * .42; c.moveTo(px + s * .08, py); c.arc(px, py, s * .08, 0, TAU); }
+  c.fill(); c.restore();
+}
+function half(c, x, y, r, rot) {
+  if (r <= 0) return;
+  c.save(); c.translate(x, y); c.rotate(rot); c.beginPath(); c.arc(0, 0, r, Math.PI, TAU); c.closePath(); c.fill(); c.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Collage bursts: a seeded field of shapes that pops in from the
+ *  centre outward, drifts downwind as one block with parallax, and
+ *  mixes where pale shapes overlap (multiply).
+ * ------------------------------------------------------------------ */
+const TYPES = [['circle', 26], ['crescent', 16], ['gem', 11], ['nested', 7], ['plus', 10], ['star', 6], ['tri', 9], ['wave', 8], ['dots', 7], ['ring', 7], ['half', 5]];
+function makeCollage(seed, n, cols) {
+  const r = rng(seed), items = [];
+  const gc = Math.ceil(Math.sqrt(n * W / H)), gr = Math.ceil(n / gc);
+  for (let i = 0; i < n; i++) {
+    const gx = (i % gc + .5 + (r() - .5) * .95) / gc, gy = (Math.floor(i / gc) + .5 + (r() - .5) * .95) / gr;
+    const x = -180 + gx * (W + 360), y = -140 + gy * (H + 280);
+    const q = r(), s = q < .16 ? 120 + r() * 150 : q < .6 ? 44 + r() * 70 : 12 + r() * 26;
+    const col = pick(r, cols), col2 = pick(r, cols);
+    items.push({ type: pick(r, TYPES), x, y, s, rot: r() * TAU, spin: (r() - .5) * 2.2, col, col2: col2 === col ? P.white : col2,
+      mul: r() < .55, layer: r(), t0: .02 + Math.hypot(x - W / 2, y - H / 2) / 1100 * .3, ph: r() * TAU });
+  }
+  return items.sort((a, b) => b.s - a.s);
+}
+function drawItem(c, it, x, y, s, rot, u) {
+  c.fillStyle = it.col; c.strokeStyle = it.col;
+  switch (it.type) {
+    case 'circle': circle(c, x, y, s); break;
+    case 'crescent': crescent(c, x, y, s, .45 + .2 * Math.sin(it.ph), rot); break;
+    case 'gem': gem(c, x, y, s, rot * .3, it.col, it.col2); break;
+    case 'nested': nested(c, x, y, s, rot * .25 + Math.PI / 4, [it.col, P.white, it.col2]); break;
+    case 'plus': plus(c, x, y, s * .6, rot); break;
+    case 'star': star(c, x, y, s * .9, rot * .5); break;
+    case 'tri': tri(c, x, y, s * .8, rot); break;
+    case 'wave': waveStroke(c, x, y, s * .7, rot * .2, it.ph + u * 5); break;
+    case 'dots': dotGrid(c, x, y, s, rot * .2); break;
+    case 'ring': ring(c, x, y, s * .8, s * .2); break;
+    case 'half': half(c, x, y, s, rot * .5); break;
+  }
+}
+function drawCollage(c, items, u, o = {}) {
+  const pan = o.pan || [0, 0], mul = o.mul !== false;
+  for (const it of items) {
+    let sc = pop(u, it.t0 + (o.delay || 0));
+    if (sc <= 0) continue;
+    let x = it.x + pan[0] * (.6 + .8 * it.layer) * u, y = it.y + pan[1] * (.6 + .8 * it.layer) * u;
+    if (o.converge != null) {
+      const k = inCubic(prog(o.converge + it.layer * .15, o.converge + .55 + it.layer * .15, u));
+      x = lerp(x, W / 2, k); y = lerp(y, H / 2, k); sc *= 1 - k;
+      if (sc <= 0.001) continue;
+    }
+    c.globalCompositeOperation = mul && it.mul && it.col !== P.sun ? 'multiply' : 'source-over';
+    drawItem(c, it, x, y, it.s * sc, it.rot + it.spin * u, u);
+  }
+  c.globalCompositeOperation = 'source-over';
+}
+const LIGHT = [[P.azure, 5], [P.turq, 6], [P.deep, 3], [P.aqua, 5], [P.lav, 5], [P.sun, 2]];
+const COLLAGE_BEACH = makeCollage(11, 96, LIGHT);
+const COLLAGE_FINALE = makeCollage(29, 96, LIGHT);
+const COLLAGE_DEEP = makeCollage(47, 70, [[P.aqua, 5], [P.turq, 5], [P.lav, 4], [P.white, 4], [P.azure, 2]]);
+
+/* ------------------------------------------------------------------ *
+ *  The twelve scenes (2 beats each). u = beats into the scene, 0…2.
+ * ------------------------------------------------------------------ */
+function fill(c, col) { c.fillStyle = col; c.fillRect(-40, -40, W + 80, H + 80); }
+function zoomAbout(c, z) { c.translate(W / 2, H / 2); c.scale(z, z); c.translate(-W / 2, -H / 2); }
+const CX = W / 2, CY = H / 2;
+function trio(c, u, orbitR, rot, r) {
+  const at = k => [CX + Math.cos(rot + k * TAU / 3) * orbitR, CY + Math.sin(rot + k * TAU / 3) * orbitR];
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = P.aqua; circle(c, ...at(1), r);
+  c.fillStyle = P.lav; circle(c, ...at(2), r);
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = .92; c.fillStyle = P.sun; circle(c, ...at(0), r * .82); c.globalAlpha = 1;
+}
+
+// 1 · SUN — three pale discs orbit and fold into one another, then a ring rings out
+function sSun(c, u) {
+  fill(c, P.bg);
+  const k = inOutCubic(prog(0, 1.7, u));
+  trio(c, u, lerp(96, 16, k), -Math.PI / 2 + Math.PI * k, 150 + 14 * outCubic(prog(1.6, 2, u)));
+  const q = prog(1.55, 2, u);
+  if (q > 0) { c.strokeStyle = rgba(P.azure, 1 - q); ring(c, CX, CY, 170 + 420 * outCubic(q), 5 * (1 - q) + 1); }
+  c.fillStyle = P.turq;
+  for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + .3, s = 16 * pop(u, .1 + i * .12) * (1 - prog(1.7, 2, u)); plus(c, CX + Math.cos(a) * 360, CY + Math.sin(a) * 300, s, a); }
+}
+// 2 · BEACH — collage burst, drifting downwind
+function sBeach(c, u) {
+  fill(c, P.bg);
+  c.save(); zoomAbout(c, 1 + .05 * u); drawCollage(c, COLLAGE_BEACH, u, { pan: [260, -150] }); c.restore();
+}
+// 3 · WAVE — a single turquoise crescent curls over in two eased steps
+function sWave(c, u) {
+  fill(c, P.bg);
+  const step = outExpo(prog(0, .5, u)) + outExpo(prog(1, 1.5, u));
+  const ang = -1.2 + step * 1.35, r = 250 * pop(u, 0, .3);
+  c.fillStyle = P.aqua; crescent(c, CX + 20, CY + 10, r * 1.28, .22, ang + Math.PI * .9);
+  c.fillStyle = P.turq; crescent(c, CX, CY, r, .35 + .25 * step / 2, ang);
+  const oa = u * Math.PI * 1.6;
+  c.fillStyle = P.deep; circle(c, CX + Math.cos(oa) * 400, CY + Math.sin(oa) * 190, 18 * pop(u, .2));
+  c.fillStyle = P.lav; circle(c, CX - Math.cos(oa) * 330, CY - Math.sin(oa) * 160, 10 * pop(u, .35));
+}
+// 4 · SKY — diagonal streams of pills over azure; a striped half-sun rises
+function sSky(c, u) {
+  fill(c, P.azure);
+  c.save(); c.translate(CX, CY); c.rotate(-.42);
+  const cols = [P.white, P.aqua, P.turq, P.lav, P.white, P.deep, P.aqua, P.white, P.lav];
+  cols.forEach((col, k) => {
+    const y = -720 + k * 170 + (k % 2 ? 30 : 0), th = 24 + 70 * hash(k * 3.1), speed = (900 + 1100 * hash(k * 7.3)) * (k % 2 ? 1 : 1.3);
+    c.fillStyle = col; c.globalAlpha = col === P.white ? .9 : 1;
+    for (let j = -1; j < 5; j++) {
+      const len = 260 + 420 * hash(k * 11 + j), x = -1500 + frac(hash(k + j * 5) + u * speed / 3200) * 3200 + j * 0;
+      c.beginPath(); c.roundRect(x, y, len, th, th / 2); c.fill();
+    }
+  });
+  c.restore(); c.globalAlpha = 1;
+  const rise = outCubic(prog(0, 1.2, u)), sx = W * .66, sy = H + 60 - 330 * rise, r = 300;
+  c.save(); c.beginPath(); c.rect(0, 0, W, H); c.clip();
+  c.fillStyle = P.sun; c.beginPath(); c.arc(sx, sy, r, Math.PI, TAU); c.closePath(); c.fill();
+  c.fillStyle = P.azure;
+  for (let k = 0; k < 5; k++) { const h = 6 + k * 5, y = sy - 40 - k * 46; c.fillRect(sx - r - 10, y, 2 * r + 20, h); }
+  c.restore();
+  c.strokeStyle = P.white; c.lineWidth = 5; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const [x0, y0, sz, o] of [[.1, .3, 30, 0], [.18, .36, 20, .15], [.3, .24, 24, .3]]) {
+    const x = W * x0 + u * 380, y = H * y0 - u * 90, a = .25 + .4 * Math.abs(Math.sin((u + o) * Math.PI * 3));
+    c.beginPath(); c.moveTo(x - sz, y - sz * a); c.lineTo(x, y); c.lineTo(x + sz, y - sz * a); c.stroke();
+  }
+  c.fillStyle = P.white;
+  for (let i = 0; i < 26; i++) circle(c, hash(i * 2.3) * W + u * 300, hash(i * 5.9) * H * .8 - u * 160, (3 + 6 * hash(i)) * pop(u, hash(i * 9) * .8));
+}
+// 5 · RIPPLE — one drop, one surface, rings
+function sRipple(c, u) {
+  fill(c, P.bg);
+  const hit = .42, sy = CY + 60;
+  const lineK = outExpo(prog(hit, hit + .6, u));
+  c.fillStyle = P.aqua; c.fillRect(CX - 900 * lineK, sy - 3, 1800 * lineK, 6);
+  if (u < hit) {
+    const p = u / hit, y = lerp(-80, sy - 26, p * p);
+    c.fillStyle = P.deep; c.beginPath(); c.ellipse(CX, y, 22 * (1 - .25 * p), 26 * (1 + .45 * p), 0, 0, TAU); c.fill();
+  } else {
+    for (let k = 0; k < 4; k++) {
+      const q = prog(hit + k * .16, hit + k * .16 + 1.2, u); if (q <= 0 || q >= 1) continue;
+      c.strokeStyle = rgba(k % 2 ? P.turq : P.azure, 1 - q); c.lineWidth = 14 * (1 - q) + 2;
+      c.beginPath(); c.ellipse(CX, sy, 40 + 820 * outCubic(q), (40 + 820 * outCubic(q)) * .24, 0, 0, TAU); c.stroke();
+    }
+    const d = prog(hit, hit + .3, u);
+    c.fillStyle = P.deep; circle(c, CX, sy - 60 * Math.sin(Math.PI * d) - 10, 14 * (1 - d));
+    c.strokeStyle = P.azure;
+    for (let i = 0; i < 7; i++) {
+      const bt = prog(hit + .1 + i * .08, hit + 1.4, u); if (bt <= 0 || bt >= 1) continue;
+      ring(c, CX + (hash(i * 3.7) - .5) * 360, sy - 20 - 300 * outCubic(bt), (6 + 12 * hash(i)) * (1 - bt * .4), 3);
+    }
+  }
+}
+// 6 · SUNCATCHER — faceted glass turning in quarter steps, mirrored across the frame
+function sSuncatcher(c, u) {
+  fill(c, P.bg);
+  const step = outExpo(prog(0, .45, u)) + outExpo(prog(1, 1.45, u));
+  const rot = step * Math.PI / 4, s = pop(u, 0, .3);
+  const cluster = (x, y, k, dir) => {
+    c.globalCompositeOperation = 'multiply';
+    nested(c, x, y, 250 * k * s, dir * rot + Math.PI / 4, [P.aqua, P.white, P.lav, P.white, P.turq]);
+    c.globalCompositeOperation = 'source-over';
+    gem(c, x, y, 110 * k * s, dir * rot, P.turq, P.azure);
+    c.fillStyle = P.white; star(c, x, y, 42 * k * s * (1 + .3 * Math.sin(u * Math.PI * 4)), dir * rot * 2);
+  };
+  cluster(CX, CY, 1.25, 1);
+  for (const sx of [-1, 1]) { cluster(CX + sx * 640, CY, .7, -1); cluster(CX + sx * 1080, CY, .42, 1); }
+  c.fillStyle = P.lav;
+  for (let i = 0; i < 12; i++) {
+    const x = CX + (i % 6 - 2.5) * 320, y = CY + (i < 6 ? -380 : 380);
+    plus(c, x, y, 14 * pop(u, .15 + (i % 6) * .08) * (.7 + .3 * Math.sin(u * 8 + i)), u * 2 + i);
+  }
+}
+// 7 · CHIME — one glass orb on a thread, swinging in the wind
+function sChime(c, u) {
+  fill(c, P.bg);
+  const ang = .34 * Math.cos(Math.PI * u) - .06, len = 540, px = CX + 80, py = -60;
+  const ox = px + Math.sin(ang) * len, oy = py + Math.cos(ang) * len;
+  c.strokeStyle = P.lav; c.lineWidth = 5; c.beginPath(); c.moveTo(px, py); c.lineTo(ox, oy - 170); c.stroke();
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = P.aqua; circle(c, ox - 30, oy, 172);
+  c.fillStyle = P.lav; circle(c, ox + 38, oy + 14, 140);
+  c.globalCompositeOperation = 'source-over';
+  c.fillStyle = 'rgba(255,255,255,0.9)'; crescent(c, ox - 44, oy - 44, 100, .35, Math.PI * .75);
+  c.fillStyle = P.azure;
+  c.save(); c.translate(ox + Math.sin(ang) * 250, oy + Math.cos(ang) * 250); c.rotate(-ang); c.scale(1.5, 1.5);
+  c.beginPath(); c.moveTo(0, -46); c.bezierCurveTo(30, -10, 34, 24, 0, 46); c.bezierCurveTo(-34, 24, -30, -10, 0, -46); c.fill(); c.restore();
+  c.fillStyle = P.turq;
+  for (let i = 0; i < 6; i++) { const a = i * TAU / 6 + u, rr = 290 + 30 * Math.sin(u * 5 + i); star(c, ox + Math.cos(a) * rr, oy + Math.sin(a) * rr * .8, 24 * pop(u, .1 + i * .15) * (.6 + .4 * Math.abs(Math.sin(u * 6 + i))), a); }
+  // wind lines passing
+  c.strokeStyle = P.azure; c.lineCap = 'round';
+  for (const [y0, w, dl] of [[CY - 300, 9, 0], [CY - 250, 5, .15], [CY + 360, 7, .4], [CY + 405, 4, .55]]) {
+    const hd = inOutCubic(prog(dl, dl + 1.1, u)), tl = inOutCubic(prog(dl + .5, dl + 1.6, u));
+    if (hd <= tl) continue;
+    c.lineWidth = w; c.beginPath();
+    for (let i = 0; i <= 40; i++) { const q = lerp(tl, hd, i / 40), x = -100 + q * (W + 200), y = y0 + Math.sin(q * TAU * 1.2) * 26; if (i) c.lineTo(x, y); else c.moveTo(x, y); }
+    c.stroke();
+  }
+}
+// 8 · DEEP — cut to blue water: light shafts, a burst of bubbles and glass, darting fish
+function sDeep(c, u) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, P.azure); g.addColorStop(.55, P.deep); g.addColorStop(1, P.deeper);
+  c.fillStyle = g; c.fillRect(-40, -40, W + 80, H + 80);
+  for (let k = 0; k < 6; k++) {
+    const x = hash(k * 4.1) * W + 60 * Math.sin(u * 2 + k), w = 60 + 140 * hash(k * 8.3);
+    const gg = c.createLinearGradient(0, 0, 0, H); gg.addColorStop(0, 'rgba(255,255,255,0.22)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gg; c.beginPath(); c.moveTo(x, -40); c.lineTo(x + w, -40); c.lineTo(x + w * 1.6 - 380, H + 40); c.lineTo(x - 380, H + 40); c.closePath(); c.fill();
+  }
+  c.save(); c.globalCompositeOperation = 'screen'; zoomAbout(c, 1 + .04 * u);
+  drawCollage(c, COLLAGE_DEEP, u, { pan: [60, -520], mul: false });
+  c.restore();
+  c.fillStyle = P.aqua;
+  for (let i = 0; i < 14; i++) {
+    const t0 = hash(i * 1.7) * .9, q = prog(t0, t0 + .9, u); if (q <= 0 || q >= 1) continue;
+    const y = H * (.25 + .6 * hash(i * 4.3)), x = lerp(-80, W + 80, outCubic(q));
+    c.save(); c.translate(x, y); c.fillStyle = i % 3 ? P.aqua : P.lav;
+    c.beginPath(); c.moveTo(18, 0); c.lineTo(-12, -9); c.lineTo(-12, 9); c.closePath(); c.fill(); c.restore();
+  }
+}
+// 9 · SAIL — one triangle riding one wave
+function sSail(c, u) {
+  fill(c, P.bg);
+  const y0 = CY + 150, amp = 44, k = TAU / 900, ph = u * 3.2;
+  const yAt = x => y0 + Math.sin(x * k - ph) * amp;
+  const draw = outExpo(prog(0, .5, u));
+  c.strokeStyle = P.azure; c.lineWidth = 26; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); for (let x = CX - 1100 * draw; x <= CX + 1100 * draw; x += 20) { if (x === CX - 1100 * draw) c.moveTo(x, yAt(x)); else c.lineTo(x, yAt(x)); } c.stroke();
+  c.strokeStyle = P.aqua; c.lineWidth = 12;
+  c.beginPath(); for (let x = CX - 1100 * draw; x <= CX + 1100 * draw; x += 20) { const y = yAt(x - 120) + 70; if (x === CX - 1100 * draw) c.moveTo(x, y); else c.lineTo(x, y); } c.stroke();
+  const bx = CX - 60, by = yAt(bx) - 18, slope = Math.atan((yAt(bx + 30) - yAt(bx - 30)) / 60), s = pop(u, .1, .3);
+  c.save(); c.translate(bx, by); c.rotate(slope); c.scale(s, s);
+  c.fillStyle = P.deep; c.beginPath(); c.roundRect(-110, -8, 220, 22, 11); c.fill();
+  c.fillStyle = P.turq; c.beginPath(); c.moveTo(8, -250); c.lineTo(120, -20); c.lineTo(8, -20); c.closePath(); c.fill();
+  c.fillStyle = P.lav; c.beginPath(); c.moveTo(-8, -210); c.lineTo(-8, -20); c.lineTo(-96, -20); c.closePath(); c.fill();
+  c.restore();
+  c.fillStyle = P.sun; circle(c, W * .78, H * .24, 70 * pop(u, .25, .3));
+  c.strokeStyle = P.turq; c.lineWidth = 4; c.lineCap = 'round';
+  const hd = inOutCubic(prog(.3, 1.4, u)), tl = inOutCubic(prog(.9, 2, u));
+  if (hd > tl) { c.beginPath(); for (let i = 0; i <= 50; i++) { const q = lerp(tl, hd, i / 50), x = -100 + q * (W + 200), y = H * .3 + Math.sin(q * TAU) * 30; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.stroke(); }
+}
+// 10 · WIND — cut to turquoise: a gust of pills and glints racing up the diagonal
+function sWind(c, u) {
+  fill(c, P.turq);
+  c.save(); c.translate(CX, CY); c.rotate(-.36);
+  for (let i = 0; i < 62; i++) {
+    const y = -900 + hash(i * 3.3) * 1800, th = 14 + 52 * Math.pow(hash(i * 1.9), 2), len = 160 + 640 * hash(i * 7.7);
+    const v = 2400 + 2600 * hash(i * 5.1), x = -1700 + frac(hash(i * 9.1) + u * v / 3600) * 3600;
+    c.fillStyle = [P.white, P.white, P.aqua, P.lav, P.azure, P.deep][i % 6];
+    c.beginPath(); c.roundRect(x, y, len * pop(u, hash(i) * .4), th, th / 2); c.fill();
+  }
+  c.restore();
+  c.fillStyle = P.white;
+  for (let i = 0; i < 18; i++) { const x = frac(hash(i * 2.1) + u * .6) * (W + 200) - 100, y = frac(hash(i * 6.7) - u * .35) * H; plus(c, x, y, (8 + 10 * hash(i)) * pop(u, hash(i * 4) * .6), u * 3 + i); }
+}
+// 11 · GLINT — one four-point star, stepping and ringing
+function sGlint(c, u) {
+  fill(c, P.bg);
+  const b = Math.floor(u), f = u - b, step = outExpo(prog(0, .5, f)) + b;
+  const sc = pop(u, 0, .28) * (1 + .18 * Math.exp(-f * 6));
+  c.strokeStyle = rgba(P.aqua, 1); ring(c, CX, CY, 190 * sc, 6);
+  c.fillStyle = P.azure; star(c, CX, CY, 220 * sc, step * Math.PI / 4, .14);
+  c.fillStyle = P.white; star(c, CX, CY, 70 * sc, step * Math.PI / 4 + Math.PI / 4, .2);
+  c.fillStyle = P.turq;
+  for (let i = 0; i < 8; i++) { const a = i * TAU / 8, q = outCubic(f); circle(c, CX + Math.cos(a) * (240 + 200 * q), CY + Math.sin(a) * (240 + 200 * q), 10 * (1 - q) * sc); }
+  const oa = -u * Math.PI * 1.4;
+  c.fillStyle = P.lav; crescent(c, CX + Math.cos(oa) * 390, CY + Math.sin(oa) * 250, 46 * pop(u, .15), .4, oa);
+}
+// 12 · FINALE — a last collage that pours back into the centre and becomes the sun trio
+function sFinale(c, u) {
+  fill(c, P.bg);
+  c.save(); zoomAbout(c, 1 + .03 * u); drawCollage(c, COLLAGE_FINALE, u, { pan: [-220, 140], converge: 1.05 }); c.restore();
+  const k = outBack(prog(1.55, 2, u), 1.4);
+  if (k > 0) trio(c, u, 96, -Math.PI / 2, 150 * k);
+}
+const SCENES = [sSun, sBeach, sWave, sSky, sRipple, sSuncatcher, sChime, sDeep, sSail, sWind, sGlint, sFinale];
+
+/* ------------------------------------------------------------------ *
+ *  Frame assembly
+ * ------------------------------------------------------------------ */
+function compose(c, t) {
+  c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  c.lineCap = 'butt'; c.lineJoin = 'miter'; c.lineWidth = 1; c.setLineDash([]); c.lineDashOffset = 0;
+  const b = wrapT(t) / BEAT, i = Math.floor(b / 2) % 12, u = b - Math.floor(b / 2) * 2;
+  c.save(); SCENES[i](c, u); c.restore();
+}
+const FAST = new Set([3, 9]);                        // sky and wind streams move fastest: give them more blur samples
+function samplesFor(t) { return FAST.has(Math.floor(wrapT(t) / BEAT / 2) % 12) ? 16 : 6; }
+function renderFrame(fi, N) {
+  const t0 = fi / FPS;
+  N = N ?? samplesFor(t0);
+  if (N <= 1) { compose(mctx, t0); return; }
+  const sc = SUB.getContext('2d'), shutter = .5 / FPS;
+  for (let k = 0; k < N; k++) {
+    compose(sc, t0 + ((k + .5) / N - .5) * shutter);
+    mctx.globalAlpha = 1 / (k + 1); mctx.drawImage(SUB, 0, 0);
+  }
+  mctx.globalAlpha = 1;
+}
+
+/* ------------------------------------------------------------------ *
+ *  SOUND — 96 BPM in D major, staccato and playful: a kick on every
+ *  cut, marimba, bubble pops on each burst, a signature sound for each
+ *  single-motif scene. Three cycles rendered, the middle one kept.
+ * ------------------------------------------------------------------ */
+async function renderAudio(only) {                     // only: 'drums' | 'bass' | 'music' | 'fx' renders one stem
+  const on = cat => !only || only === cat;
+  const SR = 48000, CYCLES = 3, LEN = SR * L * CYCLES;
+  const ac = new OfflineAudioContext({ numberOfChannels: 2, length: LEN, sampleRate: SR });
+  const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
+  const noise = ac.createBuffer(2, SR * L, SR);
+  { const r = rng(3); for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1; } }
+
+  const out = ac.createGain();
+  const water = ac.createBiquadFilter(); water.type = 'lowpass'; water.frequency.value = 19000; water.Q.value = .8;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = .005; comp.release.value = .18;
+  // a fast, hard limiter last: the staccato kit is all transients, so this is what gives the mix its loudness
+  const limit = ac.createDynamicsCompressor();
+  limit.threshold.value = -12; limit.knee.value = 0; limit.ratio.value = 14; limit.attack.value = .001; limit.release.value = .09;
+  out.connect(water); water.connect(comp); comp.connect(limit); limit.connect(ac.destination);
+  const ir = ac.createBuffer(2, SR * 2.4, SR);
+  { const r = rng(5); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * Math.pow(1 - i / d.length, 3.8); } }
+  const verb = ac.createConvolver(); verb.buffer = ir;
+  const verbOut = ac.createGain(); verbOut.gain.value = .4; verb.connect(verbOut); verbOut.connect(out);
+  const delay = ac.createDelay(2); delay.delayTime.value = BEAT * .75;
+  const fb = ac.createGain(); fb.gain.value = .3;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 3400;
+  delay.connect(dlp); dlp.connect(fb); fb.connect(delay);
+  const delOut = ac.createGain(); delOut.gain.value = .26; dlp.connect(delOut); delOut.connect(out);
+  const duck = ac.createGain(); duck.connect(out);
+
+  const filt = (type, f, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const env = (g, t, a, peak, d) => { g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); };
+  const sendTo = (node, dest, amt) => { const g = ac.createGain(); g.gain.value = amt; node.connect(g); g.connect(dest); };
+  const panned = (node, p, dest = out) => { const pn = ac.createStereoPanner(); pn.pan.value = p; node.connect(pn); pn.connect(dest); return pn; };
+  const nsrc = () => { const s = ac.createBufferSource(); s.buffer = noise; s.loop = true; s.loopEnd = L; return s; };
+  const sat = (() => { const n = 1024, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; cv[i] = Math.tanh(2 * x) / Math.tanh(2); } return cv; })();
+
+  function kick(t, v) {
+    duck.gain.setValueAtTime(.4, t); duck.gain.linearRampToValueAtTime(1, t + .18);
+    if (!on('drums')) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(46, t + .09);
+    const sh = ac.createWaveShaper(); sh.curve = sat;
+    const g = ac.createGain(); env(g, t, .002, v, .3); o.connect(sh); sh.connect(g); g.connect(out); o.start(t); o.stop(t + .35);
+  }
+  function clap(t, v, off) {
+    if (!on('drums')) return;
+    const s = nsrc(), bp = filt('bandpass', 1700, 1), g = ac.createGain();
+    g.gain.setValueAtTime(.0001, t - .001);
+    for (let k = 0; k < 3; k++) { const tk = t + k * .009; g.gain.linearRampToValueAtTime(v, tk + .001); g.gain.exponentialRampToValueAtTime(v * .25, tk + .008); }
+    g.gain.linearRampToValueAtTime(v * .7, t + .03); g.gain.exponentialRampToValueAtTime(.0001, t + .16);
+    s.connect(bp); bp.connect(g); panned(g, -.05); sendTo(g, verb, .3); s.start(t, off); s.stop(t + .2);
+  }
+  function hat(t, v, off) {
+    if (!on('drums')) return;
+    const s = nsrc(), hp = filt('highpass', 8800), g = ac.createGain(); env(g, t, .002, v, .028);
+    s.connect(hp); hp.connect(g); panned(g, .3); s.start(t, off); s.stop(t + .05);
+  }
+  function bass(t, dur, n, v) {
+    if (!on('bass')) return;
+    const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = NOTE(n);
+    const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.value = NOTE(n) / 2;
+    const lp = filt('lowpass', 500, 3); lp.frequency.setValueAtTime(1400, t); lp.frequency.exponentialRampToValueAtTime(300, t + dur);
+    const g = ac.createGain(); env(g, t, .004, v, dur);
+    const g2 = ac.createGain(); g2.gain.value = .9;
+    o.connect(lp); lp.connect(g); o2.connect(g2); g2.connect(g); g.connect(duck);
+    o.start(t); o2.start(t); o.stop(t + dur + .03); o2.stop(t + dur + .03);
+  }
+  function marimba(t, n, v, p) {
+    if (!on('music')) return;
+    const f = NOTE(n), g = ac.createGain(); env(g, t, .002, v, .32);
+    for (const [ratio, amp, dec] of [[1, 1, .32], [4, .22, .07], [10, .06, .03]]) {
+      const o = ac.createOscillator(); o.frequency.value = f * ratio;
+      const og = ac.createGain(); env(og, t, .001, amp, dec); o.connect(og); og.connect(g); o.start(t); o.stop(t + dec + .04);
+    }
+    panned(g, p); sendTo(g, verb, .25); sendTo(g, delay, .3);
+  }
+  function bell(t, n, v, p, dec = 1.2) {
+    if (!on('music')) return;
+    const f = NOTE(n), g = ac.createGain(); env(g, t, .003, v, dec);
+    for (const [ratio, amp, d] of [[1, 1, dec], [2.76, .35, dec * .5], [5.4, .12, dec * .25]]) {
+      const o = ac.createOscillator(); o.frequency.value = f * ratio;
+      const og = ac.createGain(); env(og, t, .002, amp, d); o.connect(og); og.connect(g); o.start(t); o.stop(t + d + .05);
+    }
+    panned(g, p); sendTo(g, verb, .5); sendTo(g, delay, .35);
+  }
+  function popBlip(t, f, v, p) {
+    if (!on('fx')) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * .45, t + .05);
+    const g = ac.createGain(); env(g, t, .001, v, .06); o.connect(g); panned(g, p); sendTo(g, verb, .15); o.start(t); o.stop(t + .08);
+  }
+  function whoosh(t, dur, v, p0, p1, off, f0 = 300, f1 = 3200) {
+    if (!on('fx')) return;
+    const s = nsrc(), bp = filt('bandpass', f0, 1.1);
+    bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + dur * .7);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur * .5); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const pn = ac.createStereoPanner(); pn.pan.setValueAtTime(p0, t); pn.pan.linearRampToValueAtTime(p1, t + dur);
+    s.connect(bp); bp.connect(g); g.connect(pn); pn.connect(out); sendTo(g, verb, .2); s.start(t, off); s.stop(t + dur + .02);
+  }
+  function drip(t) {
+    if (!on('fx')) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(1600, t); o.frequency.exponentialRampToValueAtTime(420, t + .12);
+    const g = ac.createGain(); env(g, t, .002, .16, .16); o.connect(g); panned(g, 0); sendTo(g, verb, .6); sendTo(g, delay, .5); o.start(t); o.stop(t + .2);
+  }
+
+  const CH = [[50, 54, 57, 61], [49, 52, 57, 61], [47, 50, 54, 57], [43, 47, 50, 54], [52, 55, 59, 62], [45, 49, 52, 57]];
+  const ROOTS = [38, 37, 35, 43, 40, 45];
+  const PENTA = [74, 76, 78, 81, 83, 86, 88, 90];
+  const MEL = [[0, 2, 4, 2, 3, 4, 6, 4], [1, 3, 4, 3, 2, 4, 5, 3], [0, 2, 3, 5, 4, 2, 3, 1], [2, 4, 5, 7, 6, 4, 5, 3], [1, 2, 4, 3, 4, 6, 5, 4], [3, 5, 6, 4, 5, 7, 6, 5]];
+  const BURSTS = [1, 3, 5, 7, 9, 11];
+
+  for (let cy = 0; cy < CYCLES; cy++) {
+    const o = cy * L, r = rng(21);
+    for (let bar = 0; bar < 6; bar++) {
+      const tb = o + bar * BAR;
+      for (let b = 0; b < 4; b++) {
+        const t = tb + b * BEAT;
+        kick(t, b % 2 === 0 ? .9 : .45);
+        if (b % 2 === 1) clap(t, .34, r() * 10);
+        for (let s = 0; s < 4; s++) hat(t + s * BEAT / 4, s === 2 ? .05 : .025, r() * 10);
+        bass(t, BEAT * .4, ROOTS[bar], .26); bass(t + BEAT / 2, BEAT * .3, ROOTS[bar] + 12, .16);
+      }
+      MEL[bar].forEach((m, k) => marimba(tb + k * BEAT / 2, PENTA[m], k % 2 ? .07 : .1, k % 2 ? .35 : -.35));
+      CH[bar].forEach((n, k) => marimba(tb + k * .012, n + 12, .035, 0));
+    }
+    // bursts: a scatter of bubble pops as the collage lands, and a gust
+    BURSTS.forEach((sc, j) => {
+      const t0 = o + sc * 2 * BEAT;
+      for (let k = 0; k < 12; k++) popBlip(t0 + .02 + k * .025 + hash(k + j * 13) * .03, 900 + 1800 * hash(k * 3 + j), .05, hash(k * 7 + j) - .5);
+      whoosh(t0, BEAT * 1.2, .08, -.7, .7, 1.1 + j, 400, 3600);
+    });
+    // single-motif scenes each get a signature
+    [74, 78, 81, 86].forEach((n, k) => bell(o + k * .03, n, .07, (k - 1.5) * .3));             // sun chord
+    whoosh(o + 4 * BEAT, BEAT * 1.4, .1, .6, -.6, 3.3, 250, 1800);                             // the wave curling
+    drip(o + 8 * BEAT + .42 * BEAT);                                                            // ripple
+    [86, 88, 90, 93, 95].forEach((n, k) => bell(o + 12 * BEAT + k * BEAT / 4, n, .05, .3, .9));   // chime
+    water.frequency.setTargetAtTime(900, o + 14 * BEAT, .03);                                   // deep: the mix dips under
+    water.frequency.setTargetAtTime(19000, o + 16 * BEAT - .02, .04);
+    [81, 86].forEach((n, k) => bell(o + 16 * BEAT + k * BEAT, n, .05, -.2, .8));                 // sail
+    [83, 86, 88, 90, 93, 95, 98].forEach((n, k) => bell(o + 20 * BEAT + k * .045, n, .035, (k / 6 - .5) * .8, .5)); // glint
+  }
+
+  const full = await ac.startRendering();
+  const buf = new AudioBuffer({ numberOfChannels: 2, length: SR * L, sampleRate: SR });
+  for (let ch = 0; ch < 2; ch++) buf.copyToChannel(full.getChannelData(ch).subarray(SR * L, SR * L * 2), ch);
+  return buf;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Boot + render hooks
+ * ------------------------------------------------------------------ */
+const ready = Promise.resolve({ missing: [] });
+window.__ready = ready;
+window.__frame = async (fi, n) => { renderFrame(fi, n ?? undefined); return main.toDataURL('image/png'); };
+window.__audio = async (stem, gain) => {           // stems reuse the mix's gain so their levels match it
+  const buf = await renderAudio(stem);
+  const a = buf.getChannelData(0), b = buf.getChannelData(1), n = a.length;
+  let peak = 0, sum = 0;
+  for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i]), Math.abs(b[i])); sum += a[i] * a[i] + b[i] * b[i]; }
+  const g = gain ?? (peak > 0 ? .84 / peak : 1);
+  const pcm = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { pcm[2 * i] = clamp(a[i] * g, -1, 1) * 32767; pcm[2 * i + 1] = clamp(b[i] * g, -1, 1) * 32767; }
+  const bytes = new Uint8Array(pcm.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), rate: buf.sampleRate, frames: n, peak, rms: Math.sqrt(sum / (2 * n)), gain: g };
+};
+if (RENDER) return;
+
+/* ------------------------------------------------------------------ *
+ *  Live player
+ * ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const pp = $('pp'), big = $('big'), scrub = $('scrub'), tcEl = $('tc');
+let playing = false, t = 0, actx = null, srcNode = null, audioBuf = null, clock0 = 0, raf = 0;
+const audioReady = renderAudio().then(b => { audioBuf = b; }).catch(() => { audioBuf = null; });
+function draw() {
+  const fi = Math.floor(wrapT(t) * FPS) % FRAMES;
+  renderFrame(fi, 1);
+  scrub.value = fi;
+  tcEl.textContent = `${(fi / FPS).toFixed(2).padStart(5, '0')} s · scene ${Math.floor(fi / FPS / BEAT / 2) + 1}`;
+}
+const now = () => (actx && srcNode) ? actx.currentTime : performance.now() / 1000;
+function tick() { t = now() - clock0; draw(); raf = requestAnimationFrame(tick); }
+async function play() {
+  if (playing) return;
+  playing = true; big.hidden = true; pp.textContent = 'Pause';
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); await audioReady; } catch (e) { /* silent playback */ }
+  if (!playing) return;
+  const off = wrapT(t);
+  if (actx && audioBuf) {
+    srcNode = actx.createBufferSource(); srcNode.buffer = audioBuf; srcNode.loop = true; srcNode.connect(actx.destination);
+    srcNode.start(0, off); clock0 = actx.currentTime - off;
+  } else { srcNode = null; clock0 = performance.now() / 1000 - off; }
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+}
+function stop() {
+  playing = false; pp.textContent = 'Play'; big.hidden = false; cancelAnimationFrame(raf);
+  if (srcNode) { try { srcNode.stop(); } catch (e) {} srcNode.disconnect(); srcNode = null; }
+}
+pp.addEventListener('click', () => playing ? stop() : play());
+big.addEventListener('click', play);
+scrub.addEventListener('input', () => { stop(); t = +scrub.value / FPS; draw(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playing ? stop() : play(); } });
+draw();
+})();
+</script>
