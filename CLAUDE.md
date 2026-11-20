@@ -4,7 +4,9 @@
 - Spec: `docs/spec.md` (single source). Procedure: `.claude/skills/coconala-lp-studio/SKILL.md`.
 - The owner delegated listing publication and buyer replies to Claude. Reading the periodic
   reports counts as confirmation. Refunds, discounts, paid actions and account settings still wait
-  for the owner's answer (spec §4). Never move buyers off Coconala. No changes outside the request.
+  for the owner's answer (spec §4).
+- 2026-11-20 owner: never ask approval for listing/publishing/reply flows (incl. the final publish button)
+  in manual or scheduled runs; keep approvals to spec §4 要判断 only. Grow the product count. Never move buyers off Coconala. No changes outside the request.
 
 ## Git workflow preference
 - The user doesn't handle git. After pushing learning or skill changes, open the PR, mark it ready

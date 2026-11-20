@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<!-- Content-market thumbnails. Render 1240x1240 with #kit / #trial / #side, then downscale to 620x620. No AI imagery. -->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1240px;height:1240px;overflow:hidden}
+body{font-family:"Yu Gothic","Meiryo",sans-serif;font-weight:700}
+.t{position:absolute;inset:0;padding:96px;display:none}
+.kick{font-size:40px;letter-spacing:.14em}
+.h{font-size:118px;line-height:1.16;font-weight:900;margin-top:44px}
+.sub{font-size:48px;line-height:1.5;margin-top:44px}
+.pills{position:absolute;left:96px;bottom:200px;display:flex;gap:18px;flex-wrap:wrap;width:1050px}
+.pill{font-size:38px;border:4px solid currentColor;border-radius:999px;padding:10px 32px}
+.foot{position:absolute;left:96px;bottom:92px;font-size:38px;opacity:.75}
+/* kit: warm paper */
+#kit{background:#fbf6ee;color:#2b2622}
+#kit .kick,#kit .pill{color:#3f7a5c}
+#kit .h{font-size:104px}
+#kit .doc{position:absolute;right:80px;top:330px;width:250px;height:340px;background:#fff;border:6px solid #2b2622;border-radius:22px;padding:34px}
+#kit .doc i{display:block;height:20px;border-radius:10px;background:#e3d8c8;margin-bottom:22px}
+#kit .doc i.y{background:#ffe08a;width:70%}
+#kit .doc i.g{background:#3f7a5c;width:55%;height:46px;border-radius:12px;margin-top:40px}
+/* trial: green */
+#trial{background:#24493a;color:#f4efe4}
+#trial .kick,#trial .pill{color:#f2c96b}
+#trial .bars{position:absolute;right:110px;top:330px;display:flex;align-items:flex-end;gap:26px;height:360px}
+#trial .bars b{display:block;width:62px;background:#f2c96b;border-radius:10px 10px 0 0}
+#trial .bars b.l{background:#7fb39a}
+/* side: ink */
+#side{background:#1f2630;color:#eef1f5}
+#side .kick,#side .pill{color:#7cc4ff}
+#side .gauge{position:absolute;right:100px;top:300px;width:360px;height:360px;border-radius:50%;border:34px solid #2f3a4a;border-top-color:#7cc4ff;border-right-color:#7cc4ff;transform:rotate(-20deg)}
+#side .yen{position:absolute;right:190px;top:420px;font-size:120px;color:#7cc4ff;font-weight:900}
+</style></head><body>
+
+<div class="t" id="kit">
+  <div class="kick">PDF ／ 講師・教室・コーチ向け</div>
+  <div class="h">体験申込<br>ページの<br>文章テンプレ</div>
+  <div class="sub">穴埋めで30〜60分。<br>業種別の記入例つき</div>
+  <div class="doc"><i></i><i class="y"></i><i></i><i></i><i class="y"></i><i class="g"></i></div>
+  <div class="pills"><span class="pill">9つの型</span><span class="pill">見出しの型10</span><span class="pill">チェック25項目</span></div>
+  <div class="foot">A4・14ページ ／ 記入例はすべて架空</div>
+</div>
+
+<div class="t" id="trial">
+  <div class="kick">EXCEL ／ 教室・講師向け</div>
+  <div class="h">体験申込・<br>生徒<br>管理表</div>
+  <div class="sub">どこから来た人が<br>入会しているか、自動で。</div>
+  <div class="bars"><b style="height:40%"></b><b class="l" style="height:62%"></b><b style="height:55%"></b><b class="l" style="height:85%"></b><b style="height:100%"></b></div>
+  <div class="pills"><span class="pill">入会率</span><span class="pill">要フォロー表示</span><span class="pill">月謝の見込み</span></div>
+  <div class="foot">7シート ／ 連絡文例8つ付き</div>
+</div>
+
+<div class="t" id="side">
+  <div class="kick">EXCEL ／ 副業・フリーランス向け</div>
+  <div class="h">副業<br>コマンド<br>センター</div>
+  <div class="sub">案件・待ち・数字を1ファイルで。<br>手取りと時給を自動計算</div>
+  <div class="gauge"></div><div class="yen">¥/h</div>
+  <div class="pills"><span class="pill">時給で比べる</span><span class="pill">期限切れを表示</span><span class="pill">週次グラフ</span></div>
+  <div class="foot">6シート ／ 使い方付き</div>
+</div>
+
+<script>
+  const k = (location.hash.slice(1) || "kit");
+  document.getElementById(k).style.display = "block";
+</script>
+</body></html>
