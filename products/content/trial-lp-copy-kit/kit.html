@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>体験申込ページの文章テンプレート集</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root { --ink:#2b2622; --sub:#6b625a; --line:#e3d8c8; --accent:#3f7a5c; --warm:#fbf6ee; --mark:#fff2c4; --red:#a33a2b; }
+  * { box-sizing: border-box; }
+  body { font-family: "Yu Gothic", "YuGothic", "Meiryo", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.75; margin: 0; }
+  h1 { font-size: 24pt; line-height: 1.35; margin: 0 0 6mm; }
+  h2 { font-size: 15pt; border-left: 6px solid var(--accent); padding: 1mm 0 1mm 4mm; margin: 0 0 5mm; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 6mm 0 2mm; color: var(--accent); page-break-after: avoid; }
+  p { margin: 0 0 3mm; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .cover { height: 260mm; display: flex; flex-direction: column; justify-content: center; background: var(--warm); padding: 0 14mm; margin: -16mm -15mm 0; }
+  .cover .kicker { color: var(--accent); font-weight: 700; letter-spacing: .15em; font-size: 11pt; }
+  .cover h1 { font-size: 30pt; margin-top: 6mm; }
+  .cover .lead { font-size: 13pt; color: var(--sub); }
+  .cover ul { font-size: 11.5pt; margin-top: 8mm; }
+  .box { border: 1.5px solid var(--line); border-radius: 3mm; padding: 4mm 5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
+  .box.fill { background: #fffdf8; }
+  .box.ng { border-color: #e8c4bd; background: #fdf4f2; }
+  .box.ok { border-color: #bfd9c9; background: #f3f9f5; }
+  .tag { display: inline-block; font-size: 8.5pt; font-weight: 700; border-radius: 1mm; padding: 0 2mm; margin-right: 2mm; color: #fff; background: var(--accent); }
+  .tag.ng { background: var(--red); }
+  .blank { background: var(--mark); padding: 0 1mm; border-radius: 1mm; }
+  .q { font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9.8pt; page-break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 2mm 2.5mm; vertical-align: top; text-align: left; }
+  th { background: var(--warm); font-weight: 700; }
+  .small { font-size: 9pt; color: var(--sub); }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  .check li { list-style: none; margin-left: -6mm; }
+  .check li::before { content: "□ "; font-weight: 700; color: var(--accent); }
+  .flow { display: flex; gap: 2mm; margin: 2mm 0 4mm; }
+  .flow div { flex: 1; border: 1.5px solid var(--line); border-radius: 2mm; padding: 2mm; font-size: 9pt; text-align: center; background: #fff; }
+  .flow b { display: block; font-size: 10pt; color: var(--accent); }
+  .ex { border-left: 3px solid var(--line); padding-left: 4mm; margin: 2mm 0 4mm; }
+  .ex p { margin-bottom: 2mm; }
+  footer.note { margin-top: 6mm; font-size: 8.5pt; color: var(--sub); }
+</style>
+</head>
+<body>
+
+<!-- 1 cover -->
+<section class="page cover">
+  <div class="kicker">TEMPLATE KIT ／ 講師・教室・コーチ向け</div>
+  <h1>体験申込ページの<br>文章テンプレート集</h1>
+  <p class="lead">穴埋めするだけで、体験レッスン・無料相談の申込ページの文章が<br>30〜60分でそろいます。</p>
+  <ul>
+    <li>ページの9つの型（順番と役割）</li>
+    <li>型ごとの書き込みシートと文型（NG例／OK例つき）</li>
+    <li>見出しの型10個・ボタン文言・よくある質問の文例</li>
+    <li>業種別の記入例 4つ（ピアノ・英会話・プログラミング・書道）</li>
+    <li>表示のルールの注意点と、公開前チェックリスト25項目</li>
+  </ul>
+  <p class="small" style="margin-top:14mm">記入例の教室・講師・料金はすべて架空です。<br>このPDFの再配布・転売はご遠慮ください。</p>
+</section>
+
+<!-- 2 how to use -->
+<section class="page">
+  <h2>このテンプレートの使い方</h2>
+  <p>体験申込ページ（LP）は、デザインより先に<b>「誰の・どんな不安に・何と答えるか」</b>の文章で決まります。このキットは、その文章を順番に埋めていくための道具です。</p>
+  <h3>進め方（30〜60分）</h3>
+  <div class="flow">
+    <div><b>1. 10問に答える</b>次のページの質問に、箇条書きで答える（15分）</div>
+    <div><b>2. 型に流し込む</b>4〜9ページの文型の<span class="blank">　　</span>を埋める（20分）</div>
+    <div><b>3. 例と見比べる</b>業種別の記入例で、長さと言い回しを整える（10分）</div>
+    <div><b>4. チェック</b>最後のチェックリストで、表示と申込の流れを確かめる（10分）</div>
+  </div>
+  <h3>できあがった文章の使い道</h3>
+  <ul>
+    <li>ホームページ作成サービス（ペライチ、STUDIO、Wix、Canvaのサイト機能など）に貼る</li>
+    <li>制作を人に頼むときの原稿として渡す（打ち合わせの時間が大きく減ります）</li>
+    <li>Instagramのプロフィール・ハイライト、LINE公式のあいさつ文、チラシにも流用する</li>
+  </ul>
+  <h3>3つの原則</h3>
+  <ol>
+    <li><b>主語は「あなた（生徒・保護者）」。</b>「当教室は〜」より「〜な方は」「お子さまが〜」で書き始める。</li>
+    <li><b>事実だけを書く。</b>実績・人数・声・空き状況は本当のことだけ。盛るより、具体的にするほうが伝わります。</li>
+    <li><b>してほしい行動は1つ。</b>このページのゴールは「体験の申込」だけ。入会・物販などの案内はページの外へ。</li>
+  </ol>
+  <div class="box"><span class="tag">このキットの範囲</span>文章の構成と文例です。ページのデザイン、予約システムの設定、法令の個別判断は含みません。表示のルールは12ページの公的な情報で最新の内容をご確認ください。</div>
+</section>
+
+<!-- 3 questions -->
+<section class="page">
+  <h2>まず10問に答える（下書きの材料）</h2>
+  <p class="small">箇条書き・一言で大丈夫です。答えにくい問いは飛ばして、最後に戻ってください。</p>
+  <table>
+    <tr><th style="width:8mm">#</th><th style="width:62mm">質問</th><th>書き方のヒント</th></tr>
+    <tr><td>1</td><td class="q">何を・誰に教えていますか</td><td>「小学生にピアノ」「社会人に英会話（オンライン）」のように一言で。</td></tr>
+    <tr><td>2</td><td class="q">一番来てほしい人は、どんな人ですか</td><td>年齢・立場・今の状態。「全員」ではなく、いちばん多い／来てほしい1人を思い浮かべる。</td></tr>
+    <tr><td>3</td><td class="q">その人が申込前に抱えている不安・悩みを3つ</td><td>体験の問い合わせで実際によく聞かれること、迷っていた理由を思い出す。</td></tr>
+    <tr><td>4</td><td class="q">ほかの教室と比べた強みを3つ</td><td>少人数、振替できる、駅から近い、指導歴、レッスンの進め方など。言い切れる事実を。</td></tr>
+    <tr><td>5</td><td class="q">通うと、どんな変化がありますか</td><td>「できるようになること」「続けやすい理由」。保証や効果の断言はしない。</td></tr>
+    <tr><td>6</td><td class="q">1回のレッスンの流れ</td><td>時間・内容・頻度。初回にすること。</td></tr>
+    <tr><td>7</td><td class="q">講師の経歴・資格・指導歴、始めた理由</td><td>年数・人数は事実のまま。理由は一言で。</td></tr>
+    <tr><td>8</td><td class="q">料金（入会金・月謝・体験料）</td><td>税込の総額で。教材費・施設費など、別にかかるものも。</td></tr>
+    <tr><td>9</td><td class="q">体験の流れと、体験後どうなるか</td><td>申込 → 当日の内容 → その後の案内。勧誘の有無をはっきり。</td></tr>
+    <tr><td>10</td><td class="q">申込の窓口と、その後の連絡方法</td><td>LINE公式・予約サイト・フォーム・電話。返信の目安時間も。</td></tr>
+  </table>
+  <div class="box ok"><span class="tag">コツ</span>3（不安）と4（強み）は、<b>同じ数だけ対にする</b>と本文が自然につながります。<br>例：「続くか不安」⇔「振替が月2回まで無料」、「先生が怖くないか」⇔「体験は保護者の見学OK」。</div>
+</section>
+
+<!-- 4 nine sections -->
+<section class="page">
+  <h2>体験申込ページの9つの型</h2>
+  <p>上から順に読まれる前提で、各ブロックに<b>1つの役割</b>だけを持たせます。スマホでは1ブロック＝1〜2画面が目安です。</p>
+  <table>
+    <tr><th style="width:8mm">#</th><th style="width:40mm">ブロック</th><th>役割</th><th style="width:44mm">材料（前ページの問い）</th></tr>
+    <tr><td>1</td><td>ファーストビュー</td><td>「自分向けのページだ」と3秒でわかる。見出し・ひとこと・申込ボタン。</td><td>1・2・5</td></tr>
+    <tr><td>2</td><td>こんなお悩みありませんか</td><td>不安を先に言葉にして、読み進める理由をつくる。</td><td>3</td></tr>
+    <tr><td>3</td><td>選ばれる理由（特徴3つ）</td><td>不安への答えを、事実で示す。</td><td>4</td></tr>
+    <tr><td>4</td><td>レッスン内容・流れ</td><td>通っている自分を想像できるようにする。</td><td>5・6</td></tr>
+    <tr><td>5</td><td>講師紹介</td><td>「この人なら」と思える安心感。</td><td>7</td></tr>
+    <tr><td>6</td><td>料金</td><td>迷いの最大の原因を、隠さず先に出す。</td><td>8</td></tr>
+    <tr><td>7</td><td>体験の流れ</td><td>当日の不安と「しつこい勧誘」の不安を消す。</td><td>9</td></tr>
+    <tr><td>8</td><td>よくある質問</td><td>最後のひっかかりを1つずつ外す。</td><td>3・問い合わせ実例</td></tr>
+    <tr><td>9</td><td>申込（クロージング）</td><td>やることを1つに絞って、背中を押す。</td><td>10</td></tr>
+  </table>
+  <div class="box"><span class="tag">お客様の声がある場合</span>ご本人の許可がある声だけ、3と4の間に置きます。<b>ない場合は作らない</b>でください（作り話は表示のルールに触れます）。声がなくても、4・7・8を具体的に書けば十分に伝わります。</div>
+  <div class="box"><span class="tag">申込ボタンの位置</span>1・3の後・6の後・9 の4か所が目安。どのボタンも行き先は同じ1つにします。</div>
+</section>
+
+<!-- 5 FV + headlines -->
+<section class="page">
+  <h2>型1　ファーストビュー（見出し・ひとこと・ボタン）</h2>
+  <div class="box fill">
+    <p><b>見出し</b>：<span class="blank">〔誰〕</span>の<span class="blank">〔悩み・望み〕</span>に、<span class="blank">〔教室の答え〕</span>。</p>
+    <p><b>ひとこと（サブ）</b>：<span class="blank">〔地域・オンライン〕</span>の<span class="blank">〔何の教室〕</span>｜<span class="blank">〔強み1〕</span>・<span class="blank">〔強み2〕</span></p>
+    <p><b>ボタン</b>：<span class="blank">〔料金〕</span>の体験レッスンを予約する（<span class="blank">〔所要時間〕</span>）</p>
+  </div>
+  <div class="box ng"><span class="tag ng">NG</span>「〇〇ピアノ教室へようこそ」「音楽の楽しさをすべての人に」<br><span class="small">→ 教室の名前とあいさつだけでは、誰のためのページか伝わりません。</span></div>
+  <div class="box ok"><span class="tag">OK</span>「『練習しなさい』と言わなくていい。おうちで弾きたくなるピアノレッスン」<br><span class="small">→ 保護者の悩みを、そのまま見出しの入口にしています。</span></div>
+  <h3>見出しの型 10</h3>
+  <table>
+    <tr><th style="width:40mm">型</th><th>文型</th></tr>
+    <tr><td>悩みの言いかえ</td><td>「<span class="blank">〔よくある口ぐせ〕</span>」がなくなる<span class="blank">〔教室〕</span></td></tr>
+    <tr><td>対象をしぼる</td><td><span class="blank">〔年齢・立場〕</span>のための<span class="blank">〔何の〕</span>レッスン</td></tr>
+    <tr><td>できるようになる</td><td><span class="blank">〔期間の目安〕</span>で<span class="blank">〔できること〕</span>を目指す<span class="blank">〔教室〕</span>（目安と書く）</td></tr>
+    <tr><td>不安を先に消す</td><td><span class="blank">〔不安〕</span>でも大丈夫。<span class="blank">〔理由〕</span>から始めます</td></tr>
+    <tr><td>続けやすさ</td><td><span class="blank">〔振替・時間・場所〕</span>だから、<span class="blank">〔忙しい人〕</span>でも続く</td></tr>
+    <tr><td>はじめの一歩</td><td>まずは<span class="blank">〔分数〕</span>分、<span class="blank">〔体験の内容〕</span>から</td></tr>
+    <tr><td>問いかけ</td><td><span class="blank">〔望み〕</span>、そろそろ始めてみませんか？</td></tr>
+    <tr><td>場面を見せる</td><td><span class="blank">〔通った後の具体的な場面〕</span>を、<span class="blank">〔教室〕</span>で</td></tr>
+    <tr><td>やり方の違い</td><td><span class="blank">〔一般的なやり方〕</span>ではなく、<span class="blank">〔この教室のやり方〕</span></td></tr>
+    <tr><td>地域名＋目的</td><td><span class="blank">〔駅・市区町村〕</span>で<span class="blank">〔目的〕</span>なら、<span class="blank">〔教室名〕</span></td></tr>
+  </table>
+  <p class="small">「No.1」「最短」「必ず」「誰でも」は、根拠を示せないなら使わないでください（12ページ）。</p>
+</section>
+
+<!-- 6 worries + reasons -->
+<section class="page">
+  <h2>型2　こんなお悩みありませんか</h2>
+  <div class="box fill">
+    <p>こんなお悩みはありませんか？</p>
+    <ul>
+      <li><span class="blank">〔不安1：読む人の言葉で〕</span></li>
+      <li><span class="blank">〔不安2〕</span></li>
+      <li><span class="blank">〔不安3〕</span></li>
+    </ul>
+    <p><span class="blank">〔教室名〕</span>は、そんな<span class="blank">〔誰〕</span>のための<span class="blank">〔何の教室〕</span>です。</p>
+  </div>
+  <div class="box ng"><span class="tag ng">NG</span>「上達しない」「やる気が出ない」<span class="small">→ 抽象的で、自分ごとになりにくい。</span></div>
+  <div class="box ok"><span class="tag">OK</span>「習い事が続かず、また途中でやめてしまわないか心配」「家で練習を見てあげる時間がとれない」</div>
+
+  <h2 style="margin-top:8mm">型3　選ばれる理由（特徴3つ）</h2>
+  <div class="box fill">
+    <p><b>理由1　<span class="blank">〔特徴をひとことで〕</span></b><br><span class="blank">〔事実：何を・どのくらい〕</span>。だから<span class="blank">〔不安1〕</span>の方も<span class="blank">〔得られること〕</span>。</p>
+    <p><b>理由2　<span class="blank">〔特徴〕</span></b><br><span class="blank">〔事実〕</span>。だから<span class="blank">〔得られること〕</span>。</p>
+    <p><b>理由3　<span class="blank">〔特徴〕</span></b><br><span class="blank">〔事実〕</span>。だから<span class="blank">〔得られること〕</span>。</p>
+  </div>
+  <p><b>「事実 → だから → 得られること」</b>の順で書くと、自慢に聞こえず、読む人の得として伝わります。</p>
+  <div class="box ok"><span class="tag">OK</span><b>理由1　振替は月2回まで無料</b><br>前日18時までのご連絡で、同じ週のほかの枠に振り替えられます。だから、行事や体調不良が多い時期も、月謝をむだにせず続けられます。</div>
+</section>
+
+<!-- 7 lesson + teacher + price -->
+<section class="page">
+  <h2>型4　レッスン内容・流れ</h2>
+  <div class="box fill">
+    <p>1回<span class="blank">〔分〕</span>分・<span class="blank">〔月◯回〕</span>。<span class="blank">〔個別／グループ◯名まで〕</span>で行います。</p>
+    <ol>
+      <li><span class="blank">〔最初の◯分：何をする〕</span></li>
+      <li><span class="blank">〔中心：何をする〕</span></li>
+      <li><span class="blank">〔最後：宿題・次回の目標など〕</span></li>
+    </ol>
+    <p><span class="blank">〔月ごと・学期ごとの節目：発表会・検定・振り返り面談など（あれば）〕</span></p>
+  </div>
+  <h2 style="margin-top:6mm">型5　講師紹介</h2>
+  <div class="box fill">
+    <p><b><span class="blank">〔講師名〕</span></b>（<span class="blank">〔肩書き〕</span>）</p>
+    <p><span class="blank">〔経歴・資格・指導歴：年数と人数は事実のまま〕</span></p>
+    <p><span class="blank">〔始めた理由・大事にしていること：2〜3文〕</span></p>
+  </div>
+  <div class="box ok"><span class="tag">OK</span>「音楽大学を卒業後、楽器店の講師を経て2016年に教室を開きました。『ピアノの時間が好き』と言ってもらえることを一番大切にしています。」</div>
+  <h2 style="margin-top:6mm">型6　料金</h2>
+  <div class="box fill">
+    <table style="margin:0">
+      <tr><th>項目</th><th>料金（税込）</th><th>備考</th></tr>
+      <tr><td>体験レッスン</td><td><span class="blank">〔円／無料〕</span></td><td><span class="blank">〔分数・持ち物〕</span></td></tr>
+      <tr><td>入会金</td><td><span class="blank">〔円〕</span></td><td><span class="blank">〔体験当日の入会で◯円 など（あれば・期限を明記）〕</span></td></tr>
+      <tr><td>月謝</td><td><span class="blank">〔円〕</span></td><td><span class="blank">〔月◯回・1回◯分〕</span></td></tr>
+      <tr><td>その他</td><td><span class="blank">〔教材費・施設費・発表会費〕</span></td><td><span class="blank">〔いつ・いくら〕</span></td></tr>
+    </table>
+  </div>
+  <p class="small">価格は消費税込みの総額で表示します。「今だけ」「通常◯円→◯円」は、期間と元の価格が本当であるときだけ（12ページ）。</p>
+</section>
+
+<!-- 8 trial flow + FAQ -->
+<section class="page">
+  <h2>型7　体験の流れ</h2>
+  <div class="box fill">
+    <ol>
+      <li><b>お申込み</b>：<span class="blank">〔窓口〕</span>から。<span class="blank">〔◯時間以内〕</span>にご返信します。</li>
+      <li><b>日程の決定</b>：<span class="blank">〔候補の出し方〕</span></li>
+      <li><b>体験当日（<span class="blank">〔分〕</span>分）</b>：<span class="blank">〔あいさつ → 何をする → 質問の時間〕</span></li>
+      <li><b>体験のあと</b>：入会は<span class="blank">〔後日でOK／その場で決めなくて大丈夫〕</span>です。<span class="blank">〔その後の連絡は1回だけ など〕</span></li>
+    </ol>
+  </div>
+  <div class="box ok"><span class="tag">OK</span>「体験のあとに、こちらから何度もご連絡することはありません。ご検討いただき、入会を希望される場合だけお知らせください。」</div>
+
+  <h2 style="margin-top:6mm">型8　よくある質問（文例12）</h2>
+  <table>
+    <tr><th style="width:62mm">質問</th><th>答えの型</th></tr>
+    <tr><td>まったくの初心者でも大丈夫ですか</td><td>はい。<span class="blank">〔初回にすること〕</span>から始めます。</td></tr>
+    <tr><td>何歳から（何歳まで）通えますか</td><td><span class="blank">〔年齢〕</span>から。<span class="blank">〔例外の相談方法〕</span></td></tr>
+    <tr><td>体験の持ち物はありますか</td><td><span class="blank">〔なし／◯◯〕</span>。<span class="blank">〔貸し出しの有無〕</span></td></tr>
+    <tr><td>保護者は見学できますか</td><td><span class="blank">〔できる／体験のみ／オンラインで共有〕</span></td></tr>
+    <tr><td>休んだときの振替はできますか</td><td><span class="blank">〔回数・期限・連絡の締切〕</span></td></tr>
+    <tr><td>家に楽器（教材・パソコン）がなくても大丈夫ですか</td><td><span class="blank">〔最初は不要／目安の時期〕</span></td></tr>
+    <tr><td>月謝以外にかかる費用は</td><td><span class="blank">〔教材費・発表会費など、金額と時期〕</span></td></tr>
+    <tr><td>入会後にコースや回数を変えられますか</td><td><span class="blank">〔変更の方法・締切〕</span></td></tr>
+    <tr><td>やめるときはどうすればいいですか</td><td><span class="blank">〔◯日前までに連絡〕</span>。引き止めはしません。</td></tr>
+    <tr><td>兄弟・友だちと一緒に体験できますか</td><td><span class="blank">〔可否・料金〕</span></td></tr>
+    <tr><td>駐車場・駐輪場はありますか</td><td><span class="blank">〔台数・近くの施設〕</span></td></tr>
+    <tr><td>オンラインの場合、何が必要ですか</td><td><span class="blank">〔端末・アプリ・通信〕</span>。初回に接続を確認します。</td></tr>
+  </table>
+</section>
+
+<!-- 9 closing + buttons -->
+<section class="page">
+  <h2>型9　申込（クロージング）</h2>
+  <div class="box fill">
+    <p><b>見出し</b>：まずは<span class="blank">〔分〕</span>分、<span class="blank">〔体験の内容〕</span>してみませんか</p>
+    <p><span class="blank">〔体験でわかること：2つ〕</span>。合わなければ、そこで終わりで大丈夫です。</p>
+    <p><span class="blank">〔空き状況：事実のときだけ。例「土曜午前は残り2枠（◯月◯日時点）」〕</span></p>
+    <p><b>ボタン</b>：<span class="blank">〔ボタン文言〕</span>　<span class="small">ボタンの下に「<span class="blank">〔返信の目安〕</span>」</span></p>
+  </div>
+  <h3>ボタン文言の例</h3>
+  <table>
+    <tr><th>窓口</th><th>文言</th><th>ボタンの下の一言</th></tr>
+    <tr><td>LINE公式</td><td>LINEで体験を予約する</td><td>友だち追加のあと「体験希望」と送ってください</td></tr>
+    <tr><td>予約サイト</td><td>空いている日時を見る</td><td>24時間ご予約いただけます</td></tr>
+    <tr><td>フォーム</td><td>体験レッスンを申し込む（1分）</td><td>◯時間以内に日程候補をお送りします</td></tr>
+    <tr><td>電話</td><td>電話で問い合わせる</td><td>受付 ◯曜〜◯曜 ◯時〜◯時</td></tr>
+    <tr><td>無料相談</td><td>30分の無料相談を予約する</td><td>オンラインで、カメラはオフでも大丈夫です</td></tr>
+  </table>
+  <div class="box ng"><span class="tag ng">NG</span>「お問い合わせはこちら」だけ<span class="small">→ 押したあと何が起きるか分からないと、押されにくくなります。</span></div>
+  <h3>LINE公式のあいさつ文（友だち追加のとき）</h3>
+  <div class="ex"><p>友だち追加ありがとうございます。<span class="blank">〔教室名〕</span>の<span class="blank">〔講師名〕</span>です。<br>体験レッスンをご希望の方は「体験希望」と、ご希望の曜日・時間帯を送ってください。<span class="blank">〔◯時間以内〕</span>にご返信します。</p></div>
+</section>
+
+<!-- 10 example piano + english -->
+<section class="page">
+  <h2>業種別の記入例（1）</h2>
+  <p class="small">すべて架空の教室です。言い回しと長さの目安としてお使いください。</p>
+  <h3>ピアノ教室（幼児〜小学生・対面）</h3>
+  <div class="ex">
+    <p><b>見出し</b>：「練習しなさい」と言わなくていい。おうちで弾きたくなるピアノレッスン</p>
+    <p><b>ひとこと</b>：◯◯駅 徒歩5分の個人ピアノ教室｜4歳から・振替月2回まで無料</p>
+    <p><b>お悩み</b>：習い事が続かず、またやめてしまわないか心配／家で練習を見てあげる時間がない／先生が厳しくないか不安</p>
+    <p><b>理由1</b>　毎回「おうちで弾く1曲」を一緒に決めます。だから、練習の声かけをしなくても、自分からピアノの前に座る日が増えていきます。</p>
+    <p><b>理由2</b>　振替は月2回まで無料。だから、行事や体調不良が多い時期も、月謝をむだにせず続けられます。</p>
+    <p><b>理由3</b>　体験と最初の1か月は、保護者の方の見学OK。だから、レッスンの様子を見てから決められます。</p>
+    <p><b>体験</b>：30分・1,000円（税込）。好きな曲を1つ選んで、右手だけで弾いてみます。</p>
+  </div>
+  <h3>英会話（社会人・オンライン・マンツーマン）</h3>
+  <div class="ex">
+    <p><b>見出し</b>：会議で黙ってしまう30代へ。仕事の英語を、1回25分から</p>
+    <p><b>ひとこと</b>：オンラインのマンツーマン英会話｜朝7時〜夜23時・前日まで予約変更OK</p>
+    <p><b>お悩み</b>：英会話スクールに通ったが、仕事で使う場面がなかった／忙しくて決まった曜日に通えない／間違えるのが恥ずかしい</p>
+    <p><b>理由1</b>　毎回、あなたの次の会議やメールを題材にします。だから、レッスンで話したことを、その週の仕事でそのまま使えます。</p>
+    <p><b>理由2</b>　予約は前日まで変更できます。だから、急な残業がある週も、別の時間に移して続けられます。</p>
+    <p><b>理由3</b>　講師は日本語も話せます。だから、言いたいことが英語にならないときも、日本語で確かめながら進められます。</p>
+    <p><b>無料相談</b>：25分。今の英語の使い方を伺い、最初の1か月の練習計画をお渡しします。勧誘はしません。</p>
+  </div>
+</section>
+
+<!-- 11 example programming + calligraphy -->
+<section class="page">
+  <h2>業種別の記入例（2）</h2>
+  <h3>プログラミング教室（小中学生・少人数）</h3>
+  <div class="ex">
+    <p><b>見出し</b>：ゲームを「遊ぶ」から「つくる」へ。小学3年生からのプログラミング教室</p>
+    <p><b>ひとこと</b>：◯◯市の少人数クラス（1クラス6名まで）｜パソコンは教室で貸し出し</p>
+    <p><b>お悩み</b>：ゲームばかりで心配だけど、取り上げたくはない／親がプログラミングを分からない／パソコンを買う必要があるか分からない</p>
+    <p><b>理由1</b>　毎月1本、自分のゲームを完成させます。だから「できた」が見えて、家でも作品を見せてくれるようになります。</p>
+    <p><b>理由2</b>　6名までの少人数。だから、つまずいたところで待たされず、その場で質問できます。</p>
+    <p><b>理由3</b>　パソコンは教室で貸し出します。だから、続けるか決めるまで、機材を買う必要はありません。</p>
+    <p><b>体験</b>：60分・無料。かんたんな迷路ゲームを1つ完成させて、お持ち帰りいただけます（データはURLでお渡し）。</p>
+  </div>
+  <h3>書道教室（大人・対面／月2回）</h3>
+  <div class="ex">
+    <p><b>見出し</b>：のし袋や芳名帳の字に、もう緊張しない。大人のための月2回の書道教室</p>
+    <p><b>ひとこと</b>：◯◯駅前・平日夜と土曜｜筆ペンから始められます</p>
+    <p><b>お悩み</b>：冠婚葬祭で名前を書くのが苦手／子どもの頃にやめてしまい、また一から始められるか不安／道具をそろえるのが大変そう</p>
+    <p><b>理由1</b>　最初の3か月は、名前・住所・のし書きなど、日常で書く字から練習します。だから、通い始めてすぐに使う場面があります。</p>
+    <p><b>理由2</b>　筆ペンから始めて、筆は希望する方だけ。だから、道具は1,000円ほどの筆ペン1本で始められます。</p>
+    <p><b>理由3</b>　月2回・各回の時間内なら出入り自由。だから、仕事の帰りに寄れる日だけ来られます。</p>
+    <p><b>体験</b>：60分・500円（税込）。ご自分の名前を、お手本を見ながら書いてみます。</p>
+  </div>
+</section>
+
+<!-- 12 rules -->
+<section class="page">
+  <h2>表示のルールで気をつけること</h2>
+  <p class="small">ここに書くのは一般的な注意点です。個別の判断が必要なときは、消費者庁などの公的な情報や専門家にご確認ください。</p>
+  <table>
+    <tr><th style="width:44mm">気をつけること</th><th>具体的には</th></tr>
+    <tr><td>実際より良く見せない<br><span class="small">（景品表示法：優良誤認）</span></td><td>「地域No.1」「合格率100%」「必ず話せる」などは、調査や実績の根拠を示せないなら使わない。根拠があっても、時期と対象を添える（例：「2026年度の在籍生◯名中◯名」）。</td></tr>
+    <tr><td>実際よりお得に見せない<br><span class="small">（景品表示法：有利誤認）</span></td><td>「通常1万円→今だけ5,000円」は、通常価格で実際に販売していた実績と、本当の期限があるときだけ。期限が来たら表示を変える。</td></tr>
+    <tr><td>価格は税込の総額で</td><td>消費者向けの価格は、消費税込みの総額で表示します（「8,800円（税込）」のように）。税抜価格を併記する場合も、総額が分かるように。</td></tr>
+    <tr><td>お客様の声</td><td>ご本人の許可を得た、実際の声だけ。言葉を大きく変えない。写真・お名前の掲載は別に許可をとる。お子さまの写真は保護者の許可を。</td></tr>
+    <tr><td>効果・効能の言い切り</td><td>健康・美容・治療に関わる効果をうたうと、別の法律（医薬品医療機器等法など）の対象になることがあります。体操・ヨガなども「◯◯が治る」とは書かない。</td></tr>
+    <tr><td>長期・高額の契約</td><td>語学教室・学習塾・家庭教師・パソコン教室で、期間が2か月を超え、金額が5万円を超える契約は「特定継続的役務提供」としてクーリング・オフや書面交付の対象になります（特定商取引法）。該当しそうなときは消費者庁の案内を確認してください。</td></tr>
+    <tr><td>写真・素材</td><td>ネットで拾った画像は使わない。フリー素材も規約（商用可・クレジット要否）を確認。</td></tr>
+  </table>
+  <p class="small">参考：消費者庁「景品表示法」「総額表示」「特定商取引法ガイド」の各ページ（いずれも検索で見つかります）。2026年11月時点の内容です。</p>
+</section>
+
+<!-- 13 checklist -->
+<section class="page">
+  <h2>公開前チェックリスト（25項目）</h2>
+  <h3>伝わるか</h3>
+  <ul class="check">
+    <li>ファーストビューだけで「誰向け・何の教室・どこで（オンラインか）」が分かる</li>
+    <li>見出しに、教室名より先に「読む人の悩みか望み」が入っている</li>
+    <li>お悩みは、読む人が実際に口にする言葉で書いた</li>
+    <li>特徴3つは「事実 → だから → 得られること」になっている</li>
+    <li>1文は60字以内。漢字が続きすぎていない（スマホで2〜3行）</li>
+    <li>専門用語に、ひとことの説明がある</li>
+  </ul>
+  <h3>安心できるか</h3>
+  <ul class="check">
+    <li>講師の顔か教室の様子が分かる写真がある（使ってよい写真だけ）</li>
+    <li>料金が税込の総額で、別にかかる費用も書いてある</li>
+    <li>体験の流れと、体験後に勧誘があるかどうかが書いてある</li>
+    <li>振替・休会・退会のルールが書いてある</li>
+    <li>住所・最寄り駅・駐車場（対面の場合）、または必要な機材（オンラインの場合）が書いてある</li>
+    <li>よくある質問が5つ以上ある</li>
+  </ul>
+  <h3>申込まで迷わないか</h3>
+  <ul class="check">
+    <li>申込ボタンが3〜4か所にあり、行き先はすべて同じ</li>
+    <li>ボタンの文言で「押すと何が起きるか」が分かる</li>
+    <li>ボタンの下に返信の目安などのひとことがある</li>
+    <li>ボタンを実際に押して、LINE・予約サイト・フォームが開くことを確かめた（スマホとパソコンの両方）</li>
+    <li>フォームの入力項目は最小限（名前・連絡先・希望日時くらい）</li>
+    <li>申込の後に届く自動返信・最初の返信文を用意した</li>
+  </ul>
+  <h3>表示のルール・仕上げ</h3>
+  <ul class="check">
+    <li>「No.1」「必ず」「誰でも」「最短」など、根拠のない言い切りがない</li>
+    <li>割引・キャンペーンには期限と条件が書いてあり、期限が過ぎたら直す予定を立てた</li>
+    <li>お客様の声は、許可を得た実際の声だけ</li>
+    <li>誤字・電話番号・住所・料金の数字を、もう一度声に出して読んだ</li>
+    <li>スマホの小さな画面で、文字が読める大きさ（本文16px以上が目安）</li>
+    <li>ページのタイトル（ブラウザのタブに出る名前）に、教室名と「体験」が入っている</li>
+    <li>空き状況など日付で変わる情報に「◯月◯日時点」と書いた</li>
+  </ul>
+</section>
+
+<!-- 14 after -->
+<section class="page">
+  <h2>公開したあとに見ること</h2>
+  <p>ページは公開してからが本番です。月に1回、次の3つだけ見直してください。</p>
+  <table>
+    <tr><th style="width:44mm">見る数字</th><th>目安と、低いときに直すところ</th></tr>
+    <tr><td>どこから申込が来たか</td><td>申込のときに「何を見て知りましたか」を1問だけ聞く。多い経路に、ページのURLを置く場所を増やす。</td></tr>
+    <tr><td>体験 → 入会の割合</td><td>体験した人のうち何人が入会したか。低いときは、体験の内容と、型7（体験の流れ）・型6（料金）の書き方を見直す。</td></tr>
+    <tr><td>見送りの理由</td><td>入会しなかった方に、理由を一言だけ聞く（お返事不要と添える）。料金・日時・場所など、多い理由をよくある質問に足す。</td></tr>
+  </table>
+  <div class="box"><span class="tag">あわせて使うと便利</span>申込の経路・体験→入会率・見送り理由を自動で集計する<b>「教室の体験申込・生徒管理表（Excel）」</b>も、同じ出品者のコンテンツとして公開しています。</div>
+  <div class="box"><span class="tag">自分で作る時間がないとき</span>この型どおりの申込ページ一式（文章・デザイン・スマホ対応）は、同じ出品者がココナラのサービスとしても制作しています。ココナラで「講師・教室の体験申込LP」と検索してください。</div>
+  <footer class="note">
+    このPDFは、構成・文例の作成に生成AIを補助として使い、表示のルールは公的な情報と照らして確認したうえで作成しています。記入例の教室・講師・料金はすべて架空です。<br>
+    ご購入者さまご本人（ご自身の教室・事業）での利用に限ります。PDFの再配布・転売、内容の転載はご遠慮ください。文例をご自身のページに使うのは自由です。
+  </footer>
+</section>
+
+</body>
+</html>
