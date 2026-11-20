@@ -3,6 +3,7 @@ import os
 import re
 
 from .common import media_info, need, run
+from .subs import dw
 
 
 def _parse_intervals(err, kind):
@@ -84,7 +85,7 @@ def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None):
     W, H = cfg["size"]
     add("resolution", (info["width"], info["height"]) == (W, H), f"{info['width']}x{info['height']}（期待 {W}x{H}）")
     add("codec", info["vcodec"] == "h264" and info["acodec"] == "aac", f"{info['vcodec']}/{info['acodec']}")
-    add("fps", info["fps"] >= 29.0, f"{info['fps']:.2f}fps")
+    add("fps", info["fps"] >= 23.9, f"{info['fps']:.2f}fps")
     d = info["duration"]
     if fmt == "short":
         add("duration", cfg["min_sec"] <= d <= cfg["max_sec"], f"{d:.1f}秒（{cfg['min_sec']}〜{cfg['max_sec']}）")
@@ -117,18 +118,34 @@ def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None):
         long_rows = []
         for m in re.finditer(r"^Dialogue: 2,[^,]*,[^,]*,SubInner,[^,]*,\d+,\d+,\d+,,(.*)$", txt, re.M):
             body = re.sub(r"\{[^}]*\}", "", m.group(1))
-            long_rows += [r for r in body.split("\\N") if len(r) > limit]
+            long_rows += [r for r in body.split("\\N") if dw(r) > limit]
         add("subtitle_line_length", not long_rows, f"{len(long_rows)}行が{limit}字超 {long_rows[:3]}")
         if fmt == "short":
+            # Every text element's real box (from the ASS events) must stay clear of the
+            # YouTube Shorts UI: the bottom strip (title, buttons) and the right column.
             sf = cfg["safe"]
-            limit_y = H - sf["bottom_px"]
-            hk = cfg["hook"]
-            hook_m = re.search(r"Hook,[^\n]*\\pos\(\d+,(\d+)\)\}(.*)", txt)
-            if hook_m:
-                rows = hook_m.group(2).count("\\N") + 1
-                bottom = int(hook_m.group(1)) + rows * hk["font_size"] * 1.15
-                add("safe_area_hook", bottom <= limit_y, f"オチ文の下端 {bottom:.0f}px（{limit_y}px以内）")
-            add("safe_area_subs", cfg["subs"]["bottom_y"] <= limit_y, f"字幕の下端 {cfg['subs']['bottom_y']}px")
+            limit_y, limit_x = H - sf["bottom_px"], W - sf["right_px"]
+            sizes = {"Hook": cfg["hook"]["font_size"], "Band": cfg["band"]["font_size"], "Label": 46,
+                     "SubInner": cfg["subs"]["font_size"]}
+            off, right = [], []
+            for m in re.finditer(r"^Dialogue: \d+,[^,]*,[^,]*,(Hook|Band|Label|SubInner),[^\n]*?"
+                                 r"\\pos\((\d+),(\d+)\)([^\n]*?)\}([^\n]*)$", txt, re.M):
+                style_, x, y, tags, body = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4), m.group(5)
+                body = re.sub(r"\{[^}]*\}", "", body)
+                rows = body.split("\\N")
+                scales = [int(v) for v in re.findall(r"\\fscx(\d+)", tags)]
+                fs = sizes[style_] * (max(scales) / 100 if scales else 1.0)
+                hgt = len(rows) * fs * 1.15
+                bottom = y if style_ == "SubInner" else (y + hgt if style_ == "Hook" else y + hgt / 2)
+                half_w = max(dw(r) for r in rows) * fs / 2
+                if bottom > limit_y:
+                    off.append(f"{style_}『{body[:10]}』下端{bottom:.0f}px")
+                if bottom > H * 0.55 and x + half_w > limit_x:
+                    right.append(f"{style_}『{body[:10]}』右端{x + half_w:.0f}px")
+            add("safe_area_bottom", not off, f"{len(off)}件 {off[:3]}（下端{limit_y}px以内）")
+            # The like/comment column only covers the lower right; reference channels run big
+            # captions under it, so this is a warning, not a failure.
+            add("safe_area_right", not right, f"{len(right)}件 {right[:3]}（右端{limit_x}px以内）", hard=False)
 
     if asr_model and ass_path and os.path.exists(ass_path):
         score, bad = asr_sync(path, ass_path, asr_model)

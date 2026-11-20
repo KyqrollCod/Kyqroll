@@ -19,7 +19,7 @@ PowerShell で:
 
 ```powershell
 cd clipper
-./setup.ps1
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
 ffmpeg・Python・依存パッケージを入れます。NVIDIA GPU がある場合は CUDA 版の文字起こしが自動で使われます
@@ -45,6 +45,8 @@ python -m clipper run "https://www.youtube.com/watch?v=XXXX" --cookies-from-brow
 
 ```bash
 python tests/test_pipeline.py        # 合成した配信で 解析→下書き→書き出し(4種)→QC が全て通ること
+python tests/test_events.py          # 画面イベント（テンプレート一致）の検出
+python tests/test_regressions.py     # 独立レビューで見つかった不具合の再発防止（15項目）
 ```
 
 フォント: M PLUS Rounded 1c Black / Dela Gothic One（SIL Open Font License、`assets/fonts/OFL.txt`）。

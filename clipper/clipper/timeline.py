@@ -23,7 +23,19 @@ def keep_ranges(clip, words, tl):
     shortened to keep_gap (split evenly so both sides keep a breath)."""
     start, end = float(clip["start"]), float(clip["end"])
     if clip.get("segments"):
-        return [[float(a), float(b)] for a, b in clip["segments"] if float(b) > float(a)]
+        # Explicit segments: clamp to the clip, sort, merge overlaps (output is chronological).
+        segs = sorted([max(start, float(a)), min(end, float(b))] for a, b in clip["segments"])
+        out = []
+        for a, b in segs:
+            if b <= a:
+                continue
+            if out and a <= out[-1][1]:
+                out[-1][1] = max(out[-1][1], b)
+            else:
+                out.append([a, b])
+        if not out:
+            raise ValueError(f"{clip.get('id')}: segments が start〜end の範囲に1つもありません")
+        return out
     if not clip.get("trim_silence", True):
         return [[start, end]]
     sp = speech_ranges(words, start, end, tl)

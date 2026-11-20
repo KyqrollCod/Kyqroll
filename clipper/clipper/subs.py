@@ -3,16 +3,25 @@ import re
 
 from .common import apply_glossary, ass_color
 
+def dw(text):
+    """Display width in full-width characters: half-width ASCII counts as ~0.55."""
+    return sum(0.55 if ord(c) < 128 else 1.0 for c in text)
+
+
 PUNCT_BREAK = re.compile(r"[。！？!?…]$")
 SOFT_BREAK = re.compile(r"[、,，]$")
 
 
+def fits_len(text, max_chars, max_lines=2):
+    return all(dw(r) <= max_chars for r in wrap(text, max_chars, max_lines))
+
+
 def fits(text, max_chars, max_lines=2):
     """True when the text wraps into rows that all fit AND every row break is a natural one."""
-    if len(text) <= max_chars:
+    if dw(text) <= max_chars:
         return True
     rows = wrap(text, max_chars, max_lines)
-    if any(len(r) > max_chars for r in rows):
+    if any(dw(r) > max_chars for r in rows):
         return False
     pos, nat = 0, set(_breaks(text))
     for r in rows[:-1]:
@@ -72,11 +81,13 @@ def auto_lines(words, start, end, max_chars, gl, gap_break=0.35, max_lines=2):
         carry = []
         t = text_of(ev)
         prev_t = text_of(merged[-1]) if merged else ""
+        # Scraps merge whenever the rows still fit by length; a slightly less natural break beats
+        # a one-character subtitle flashing on screen.
         if len(t) <= 2 and i + 1 < len(events) and (not merged or PUNCT_BREAK.search(prev_t)) \
-                and fits(text_of(ev + events[i + 1]), max_chars, max_lines):
+                and fits_len(text_of(ev + events[i + 1]), max_chars, max_lines):
             carry = ev
             continue
-        if merged and len(t) <= 2 and fits(text_of(merged[-1] + ev), max_chars, max_lines):
+        if merged and len(t) <= 2 and fits_len(text_of(merged[-1] + ev), max_chars, max_lines):
             merged[-1] = merged[-1] + ev
         else:
             merged.append(ev)
@@ -123,23 +134,30 @@ def _breaks(text):
 
 
 def wrap(text, max_chars, max_lines):
-    """Explicit '\\n' wins. Otherwise balanced lines, breaking after punctuation or a particle
-    so a word (国士無双) never splits across lines."""
+    """Explicit '\\n' wins (extra rows join the last, never dropped). Otherwise balanced rows,
+    breaking after punctuation, a space or a particle, so a word (国士無双) never splits."""
     if "\n" in text:
-        return text.split("\n")[:max_lines]
-    if len(text) <= max_chars:
+        rows = text.split("\n")
+        return rows[:max_lines - 1] + ["".join(rows[max_lines - 1:])]
+    if dw(text) <= max_chars:
         return [text]
-    n = max(2, min(max_lines, -(-len(text) // max_chars)))
+    n = max(2, min(max_lines, int(-(-dw(text) // max_chars))))
     out, rest = [], text
     while rest and len(out) < n - 1:
-        target = -(-len(rest) // (n - len(out)))
-        best, best_d = None, 99
         rows_left = n - len(out) - 1
-        for cut in _breaks(rest):
-            fits_rest = len(rest) - cut <= max_chars * rows_left
-            if 2 <= cut <= min(len(rest) - 1, max_chars) and fits_rest and abs(cut - target) < best_d:
-                best, best_d = cut, abs(cut - target)
-        cut = best if best is not None else min(max(target, len(rest) - max_chars * rows_left), max_chars)
+        target = dw(rest) / (n - len(out))
+        brks = [c for c in _breaks(rest) if 2 <= c <= len(rest) - 1 and dw(rest[:c]) <= max_chars]
+        good = [c for c in brks if dw(rest[c:].strip()) <= max_chars * rows_left]
+        if good:
+            cut = min(good, key=lambda c: abs(dw(rest[:c]) - target))
+        elif brks:                       # rest will overflow anyway: at least don't split a word
+            cut = max(brks)
+        else:                            # no break at all: hard cut at the width limit
+            cut, acc = 0, 0.0
+            while cut < len(rest) and acc + dw(rest[cut]) <= max_chars:
+                acc += dw(rest[cut])
+                cut += 1
+            cut = max(1, cut)
         out.append(rest[:cut].strip())
         rest = rest[cut:].strip()
     out.append(rest)

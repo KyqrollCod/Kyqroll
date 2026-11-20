@@ -79,8 +79,9 @@ def filter_script_args(path):
     global _FF_MAJOR
     if _FF_MAJOR is None:
         out = run([need("ffmpeg"), "-hide_banner", "-version"], capture=True)
-        m = re.search(r"version (?:n)?(\d+)", out)
-        _FF_MAJOR = int(m.group(1)) if m else 6
+        m = re.search(r"version\s+n?(\d+)\.", out, re.I)
+        # Git builds (BtbN "N-118xxx-g...") are always current.
+        _FF_MAJOR = int(m.group(1)) if m else (99 if re.search(r"version\s+N-", out) else 6)
     return ["-/filter_complex", path] if _FF_MAJOR >= 7 else ["-filter_complex_script", path]
 
 
@@ -110,9 +111,13 @@ def media_info(path):
 
 
 def ff_escape(path):
-    """Escape a path for use inside an ffmpeg filter argument (Windows-safe)."""
+    """Escape a path as an UNQUOTED filter option value inside a filtergraph (Windows-safe).
+
+    Two levels: first the option value (\\ ' :), then the filtergraph (\\ ' [ ] , ;).
+    Quoting is avoided because inside '...' ffmpeg cannot express an apostrophe (O'Brien)."""
     p = os.path.abspath(path).replace("\\", "/")
-    return p.replace(":", "\\:").replace("'", "\\'").replace(",", "\\,").replace("[", "\\[").replace("]", "\\]")
+    lvl1 = "".join("\\" + c if c in "\\':" else c for c in p)
+    return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
 
 
 def ass_color(hex_rgb, alpha=0):

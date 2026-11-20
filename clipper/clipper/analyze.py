@@ -14,17 +14,22 @@ import numpy as np
 from .common import load_json, need, save_json
 
 
-def _robust_z(x):
+def _robust_z(x, floor=1e-6):
+    """Median/MAD z-score. `floor` keeps sparse count series (median 0) from turning a single
+    message into a maximal score."""
     med = np.median(x)
-    mad = np.median(np.abs(x - med)) * 1.4826 + 1e-6
+    mad = max(np.median(np.abs(x - med)) * 1.4826, floor)
     return np.clip((x - med) / mad, -3, 8)
 
 
 def _smooth(x, n):
+    """Moving average with edge padding: same length as x for any n, no bias at the ends."""
+    n = int(min(max(1, n), len(x)))
     if n <= 1:
         return x
-    k = np.ones(n) / n
-    return np.convolve(x, k, mode="same")
+    left, right = n // 2, n - 1 - n // 2
+    xp = np.pad(x, (left, right), mode="edge")
+    return np.convolve(xp, np.ones(n) / n, mode="valid")
 
 
 def loudness_series(src, duration, bin_sec):
@@ -47,7 +52,9 @@ def loudness_series(src, duration, bin_sec):
             out[i] = 20 * np.log10(np.sqrt(np.mean(a * a)) + 1e-9)
             i += 1
     proc.wait()
-    return out
+    if 0 < i < n_bins:
+        out[i:] = out[i - 1]          # a short final bin is not silence
+    return np.maximum(out, -60.0)     # silence floor: dropouts must not drag the baseline
 
 
 def chat_series(chat, n_bins, bin_sec, lag, patterns, hype):
@@ -173,9 +180,9 @@ def analyze(wd, src, duration, st, gl):
     w = an["weights"]
     loud_rel = loud - _smooth(loud, max(3, int(60 / bs)))  # loud relative to the last minute
     parts = {
-        "chat": _smooth(_robust_z(rate), sm) if chat else np.zeros(n),
-        "react": _smooth(_robust_z(react), sm) if chat else np.zeros(n),
-        "audio": _smooth(_robust_z(loud_rel), sm),
+        "chat": _smooth(_robust_z(rate, floor=1.0), sm) if chat else np.zeros(n),
+        "react": _smooth(_robust_z(react, floor=1.0), sm) if chat else np.zeros(n),
+        "audio": _smooth(_robust_z(loud_rel, floor=1.0), sm),   # 1 dB: flat audio is not news
         "keyword": _smooth(ckw + skw, sm),
         "event": _smooth(ev, 3),
     }

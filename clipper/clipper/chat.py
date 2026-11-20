@@ -43,12 +43,15 @@ def _from_twitch(d):
 
 
 def normalize_chat(path):
+    """Accepts yt-dlp live_chat.json (JSON lines), TwitchDownloader JSON, or [{t, text}]."""
     with open(path, encoding="utf-8") as fh:
-        head = fh.read(2048)
-        fh.seek(0)
-        if head.lstrip().startswith("[") or '"comments"' in head:
-            d = json.load(fh)
-            if isinstance(d, list):
-                return sorted(({"t": float(m["t"]), "text": m.get("text", "")} for m in d), key=lambda m: m["t"])
-            return sorted(_from_twitch(d), key=lambda m: m["t"])
-        return sorted(_from_youtube(fh), key=lambda m: m["t"])
+        raw = fh.read()
+    try:
+        d = json.loads(raw)
+    except json.JSONDecodeError:
+        d = None
+    if isinstance(d, dict) and "comments" in d:
+        return sorted(_from_twitch(d), key=lambda m: m["t"])
+    if isinstance(d, list):
+        return sorted(({"t": float(m["t"]), "text": m.get("text", "")} for m in d), key=lambda m: m["t"])
+    return sorted(_from_youtube(raw.splitlines()), key=lambda m: m["t"])

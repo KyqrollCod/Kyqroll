@@ -18,6 +18,7 @@ from .common import (ROOT, glossary, load_json, load_yaml, media_info, need, run
 
 
 def _picks(spec, n):
+    """'1,3-5' -> [1,3,4,5]. Out-of-range picks are an error, never silently replaced."""
     out = []
     for part in (spec or "").split(","):
         part = part.strip()
@@ -28,7 +29,10 @@ def _picks(spec, n):
             out += list(range(int(a), int(b) + 1))
         else:
             out.append(int(part))
-    return [p for p in out if 1 <= p <= n]
+    bad = [p for p in out if not 1 <= p <= n]
+    if bad:
+        sys.exit(f"--pick {bad} は範囲外です（候補は 1〜{n}）")
+    return out
 
 
 def cmd_fetch(a):
@@ -127,13 +131,23 @@ def cmd_qc(a):
     wd = work_dir(a.work)
     st = style()
     out_dir = os.path.join(wd, "out")
-    reports = {r["id"]: r for r in load_json(os.path.join(out_dir, "render.json"))}
+    rj = os.path.join(out_dir, "render.json")
+    reports = {r["id"]: r for r in load_json(rj)} if os.path.exists(rj) else {}
     results, ok = [], True
-    for c in _clips(wd, a.only):
+    clips = _clips(wd, a.only)
+    if not clips:
+        print("  FAIL: clips.yaml に検査するクリップがありません")
+        return False
+    for c in clips:
         path = os.path.join(out_dir, f"{c['id']}.mp4")
         if not os.path.exists(path):
+            print(f"  {c['id']}: FAIL\n      - 書き出しファイルがありません: {path}")
+            results.append({"file": path, "format": c.get("format"), "pass": False,
+                            "checks": [{"name": "exists", "ok": False, "detail": "missing", "hard": True}]})
+            ok = False
             continue
-        r = check(path, c.get("format", "short"), st, (reports.get(c["id"]) or {}).get("ass"),
+        ass = (reports.get(c["id"]) or {}).get("ass") or os.path.join(out_dir, f"{c['id']}.ass")
+        r = check(path, c.get("format", "short"), st, ass,
                   os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None))
         results.append(r)
         ok &= r["pass"]
@@ -164,6 +178,12 @@ def cmd_run(a):
 
 
 def main(argv=None):
+    # Japanese messages must not crash a cp932/cp1252 console (Windows, piped output).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     p = argparse.ArgumentParser(prog="clipper", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
 
