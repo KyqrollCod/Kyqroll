@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>要 Kaname キャリアコーチング｜30代のための3回完結プログラム（制作サンプル）</title>
+<meta name="description" content="転職するかどうか、から一緒に考える。30代会社員のための3回完結のキャリアコーチング。（架空のサービスによる制作サンプルです）">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f3ee; --surface:#fffdf9; --ink:#1c2433; --sub:#5b6270; --line:#ddd6ca;
+    --navy:#1f3352; --brass:#a5813f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  h1,h2,h3,.band,.persona,.answer,.lead,.habit{word-break:auto-phrase;text-wrap:balance}
+  html{scroll-behavior:smooth}
+  body{font-family:"Noto Sans JP",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.95;font-size:16px;font-weight:400}
+  a{color:inherit}
+  .serif{font-family:"Noto Serif JP",serif}
+  .sample{background:var(--ink);color:#fff;font-size:12px;text-align:center;padding:6px 16px}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header{border-bottom:1px solid var(--line)}
+  header .wrap{display:flex;justify-content:space-between;align-items:center;height:64px}
+  .brand{font-family:"Noto Serif JP",serif;font-weight:700;font-size:20px;text-decoration:none;letter-spacing:.08em}
+  .brand small{font-family:"Noto Sans JP",sans-serif;font-size:11px;font-weight:500;color:var(--sub);margin-left:8px;letter-spacing:.04em}
+  .btn{display:inline-flex;align-items:center;justify-content:center;background:var(--navy);color:#fff;text-decoration:none;padding:15px 28px;font-weight:500;letter-spacing:.06em;border-radius:2px;transition:background .2s}
+  .btn:hover{background:#15243c}
+  .btn.ghost{background:transparent;color:var(--navy);border:1px solid var(--navy)}
+  .btn.small{padding:9px 16px;font-size:14px}
+  .hero{padding:64px 0 72px}
+  .label{font-size:12px;letter-spacing:.2em;color:var(--brass);font-weight:700}
+  .hero h1{font-family:"Noto Serif JP",serif;font-weight:700;font-size:clamp(30px,7vw,54px);line-height:1.55;margin:18px 0 22px;letter-spacing:.02em}
+  .hero p.lead{color:var(--sub);max-width:34em}
+  .hero .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+  .hero .meta{display:grid;grid-template-columns:repeat(3,1fr);margin-top:48px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .hero .meta div{padding:16px 8px;text-align:center;border-right:1px solid var(--line)}
+  .hero .meta div:last-child{border-right:0}
+  .hero .meta b{display:block;font-family:"Noto Serif JP",serif;font-size:22px;color:var(--navy)}
+  .hero .meta span{font-size:12px;color:var(--sub)}
+  section{padding:72px 0;border-top:1px solid var(--line)}
+  .head{margin-bottom:36px}
+  .head h2{font-family:"Noto Serif JP",serif;font-weight:700;font-size:clamp(24px,5.4vw,34px);line-height:1.6;margin-top:10px}
+  .for{display:grid;gap:0}
+  .for li{list-style:none;padding:18px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:40px 1fr;gap:8px}
+  .for li span{font-family:"Noto Serif JP",serif;color:var(--brass)}
+  .sessions{display:grid;gap:20px}
+  .session{background:var(--surface);border:1px solid var(--line);padding:28px 24px}
+  .session .no{font-family:"Noto Serif JP",serif;color:var(--brass);font-size:14px;letter-spacing:.1em}
+  .session h3{font-family:"Noto Serif JP",serif;font-size:21px;line-height:1.6;margin:8px 0 10px}
+  .session p{color:var(--sub);font-size:15px}
+  .session .out{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);font-size:14px}
+  .session .out b{color:var(--navy)}
+  .coach{display:grid;gap:28px}
+  .portrait{aspect-ratio:4/5;background:linear-gradient(160deg,#e9e2d6,#d9cfbf);display:grid;place-items:center;color:var(--sub);font-size:13px;max-width:320px}
+  .coach h3{font-family:"Noto Serif JP",serif;font-size:24px}
+  .coach .role{font-size:13px;color:var(--brass);letter-spacing:.1em}
+  .coach p{color:var(--sub);margin-top:14px;font-size:15px}
+  .creds{margin-top:18px;font-size:14px}
+  .creds li{list-style:none;padding:6px 0;border-bottom:1px solid var(--line)}
+  .plan{background:var(--surface);border:1px solid var(--navy);padding:32px 24px;max-width:640px}
+  .plan .price{font-family:"Noto Serif JP",serif;font-size:40px;color:var(--navy);line-height:1.2;margin:10px 0 4px}
+  .plan .price small{font-size:15px;font-family:"Noto Sans JP",sans-serif;color:var(--sub);margin-left:6px}
+  .plan ul{margin:20px 0 24px}
+  .plan li{list-style:none;padding:8px 0 8px 22px;position:relative;font-size:15px;border-bottom:1px solid var(--line)}
+  .plan li::before{content:"";position:absolute;left:2px;top:19px;width:10px;height:1px;background:var(--brass)}
+  .free{margin-top:18px;font-size:14px;color:var(--sub)}
+  .faq dl{max-width:760px}
+  .faq dt{font-family:"Noto Serif JP",serif;font-weight:700;font-size:17px;padding-top:20px}
+  .faq dt::before{content:"Q.";color:var(--brass);margin-right:8px}
+  .faq dd{color:var(--sub);font-size:15px;padding:6px 0 20px;border-bottom:1px solid var(--line)}
+  .closing{background:var(--navy);color:#fff;text-align:center}
+  .closing h2{font-family:"Noto Serif JP",serif;font-size:clamp(24px,5.4vw,34px);line-height:1.6}
+  .closing p{opacity:.8;margin:14px 0 28px;font-size:15px}
+  .closing .btn{background:#fff;color:var(--navy)}
+  footer{text-align:center;font-size:12px;color:var(--sub);padding:28px 20px 92px}
+  .sticky{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:rgba(246,243,238,.96);border-top:1px solid var(--line);z-index:10}
+  .sticky .btn{width:100%}
+  @media (min-width:768px){
+    .sessions{grid-template-columns:repeat(3,1fr)}
+    .coach{grid-template-columns:320px 1fr;align-items:start;gap:48px}
+    .two{display:grid;grid-template-columns:.8fr 1.2fr;gap:48px}
+    .sticky{display:none}
+    footer{padding-bottom:28px}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+</style>
+</head>
+<body>
+<div class="sample">制作サンプルです。サービス・コーチ・料金はすべて架空です。</div>
+<header>
+  <div class="wrap">
+    <a class="brand" href="#">要 Kaname<small>キャリアコーチング</small></a>
+    <a class="btn small" href="#contact">無料相談</a>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <p class="label">FOR 30s PROFESSIONALS</p>
+      <h1>転職するかどうか、<br>から一緒に考える。</h1>
+      <p class="lead">求人を紹介しないコーチングだから、「今の会社に残る」も正解のひとつ。3回の対話で、あなたが大事にしたいことを言葉にして、次の一歩を自分で決められる状態をつくります。</p>
+      <div class="actions">
+        <a class="btn" href="#contact">30分の無料相談を予約する</a>
+        <a class="btn ghost" href="#program">プログラムを見る</a>
+      </div>
+      <div class="meta">
+        <div><b>3回</b><span>で完結</span></div>
+        <div><b>60分</b><span>オンライン</span></div>
+        <div><b>0件</b><span>求人の紹介</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap two">
+      <div class="head"><p class="label">FOR YOU</p><h2>こんな方のための<br>プログラムです</h2></div>
+      <ul class="for">
+        <li><span>一</span>仕事に大きな不満はないが、このままでいいのか分からない</li>
+        <li><span>二</span>転職サイトに登録したものの、応募する気になれない</li>
+        <li><span>三</span>家族や同僚には、正直な気持ちを相談しにくい</li>
+        <li><span>四</span>やりたいことを聞かれると、うまく答えられない</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="program">
+    <div class="wrap">
+      <div class="head"><p class="label">PROGRAM</p><h2>3回の対話で、決める材料をそろえます</h2></div>
+      <div class="sessions">
+        <article class="session">
+          <p class="no">SESSION 01</p>
+          <h3>これまでを振り返る</h3>
+          <p>うれしかった仕事、つらかった仕事を時系列で話していただきます。評価軸は「頑張れた理由」です。</p>
+          <p class="out"><b>持ち帰るもの：</b>あなたの「頑張れる条件」3つ</p>
+        </article>
+        <article class="session">
+          <p class="no">SESSION 02</p>
+          <h3>選択肢を並べる</h3>
+          <p>残る・社内で動く・転職する・副業で試す。選択肢ごとに、得るものと失うものを一緒に書き出します。</p>
+          <p class="out"><b>持ち帰るもの：</b>選択肢の比較シート</p>
+        </article>
+        <article class="session">
+          <p class="no">SESSION 03</p>
+          <h3>最初の一歩を決める</h3>
+          <p>大きな決断ではなく、来週できる小さな行動を1つ決めます。その後1ヶ月はメッセージで相談できます。</p>
+          <p class="out"><b>持ち帰るもの：</b>1ヶ月の行動メモ</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap coach">
+      <div class="portrait">コーチの写真が入ります</div>
+      <div>
+        <p class="role">COACH</p>
+        <h3>要 誠（かなめ まこと・架空）</h3>
+        <p>メーカーの人事部で〇年、採用と社内異動を担当。辞めていく人の多くが「辞めたいのではなく、迷っていた」ことに気づき、独立しました。答えを出すのはご本人だと考えています。</p>
+        <ul class="creds">
+          <li>〇〇認定コーチ（資格名が入ります）</li>
+          <li>キャリアコンサルタント（国家資格・登録番号が入ります）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="price">
+    <div class="wrap">
+      <div class="head"><p class="label">PRICE</p><h2>料金</h2></div>
+      <div class="plan">
+        <p class="serif" style="font-weight:700">3回完結プログラム</p>
+        <p class="price">66,000円<small>税込・一括</small></p>
+        <ul>
+          <li>60分のオンラインセッション × 3回</li>
+          <li>各回の振り返りメモ（PDF）</li>
+          <li>3回目のあと1ヶ月間のメッセージ相談</li>
+        </ul>
+        <a class="btn" href="#contact">まずは無料相談を予約する</a>
+        <p class="free">無料相談（30分）では、プログラムが合うかどうかを率直にお伝えします。合わない場合は、ほかの選択肢をご案内します。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq">
+    <div class="wrap">
+      <div class="head"><p class="label">FAQ</p><h2>よくあるご質問</h2></div>
+      <dl>
+        <dt>転職を前提にしていなくても大丈夫ですか？</dt>
+        <dd>はい。「今の会社に残る」と決める方もいます。決めるのはご本人です。</dd>
+        <dt>会社に知られることはありますか？</dt>
+        <dd>ありません。ご相談の内容を第三者に伝えることはありません。</dd>
+        <dt>日程の変更はできますか？</dt>
+        <dd>前日までのご連絡で変更できます。</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="closing" id="contact">
+    <div class="wrap">
+      <h2>迷っている今が、<br>いちばん話しやすいときです。</h2>
+      <p>30分の無料相談は、オンラインで平日夜と土日に受け付けています。</p>
+      <a class="btn" href="#contact">無料相談を予約する</a>
+    </div>
+  </section>
+</main>
+
+<footer>要 Kaname キャリアコーチング（架空）<br>このページはLP制作の見本として作成したもので、実在のサービスではありません。</footer>
+<div class="sticky"><a class="btn" href="#contact">30分の無料相談を予約する</a></div>
+</body>
+</html>

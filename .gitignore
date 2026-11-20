@@ -1,2 +1,5 @@
+deliveries/
 __pycache__/
 *.pyc
+clipper/work/
+clipper/out/
