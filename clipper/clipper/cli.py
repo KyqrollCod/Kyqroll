@@ -200,9 +200,12 @@ def cmd_qc(a):
         prog = current()
         if prog:
             prog.start(f"q:{c['id']}")
-        r = check(path, c.get("format", "short"), st, ass,
-                  os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None),
-                  opening=float((reports.get(c["id"]) or {}).get("opening") or 0.0))
+        from contextlib import nullcontext
+        from .common import gpu_lock
+        with (gpu_lock("品質チェックの聞き取り") if getattr(a, "asr", None) else nullcontext()):
+            r = check(path, c.get("format", "short"), st, ass,
+                      os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None),
+                      opening=float((reports.get(c["id"]) or {}).get("opening") or 0.0))
         results.append(r)
         ok &= r["pass"]
         bad = [f"{x['name']}: {x['detail']}" for x in r["checks"] if not x["ok"]]
@@ -241,12 +244,14 @@ def cmd_align(a):
         c["subs"] = lines
         if ml:   # timing from three estimates on the voice-only stem (see align_ctc.combine_timing)
             from .align_ctc import combine_timing, ctc_starts
+            from .common import gpu_lock
             from .voiceprep import speech_on, vocal_words, vocals
-            v = vocals(wd, c.get("source") or src, s0, s1)
-            vw = vocal_words(wd, v, s0, s1)
-            lines_w, _ = align_script(vw, s0, s1, c["script"], None)
-            est_w = [(float(x["start"]), float(x["end"])) if x.get("_m") else None for x in lines_w]
-            est_c = ctc_starts(lines, v, s0, s0, s1)
+            with gpu_lock("声の分離と時刻合わせ"):
+                v = vocals(wd, c.get("source") or src, s0, s1)
+                vw = vocal_words(wd, v, s0, s1)
+                lines_w, _ = align_script(vw, s0, s1, c["script"], None)
+                est_w = [(float(x["start"]), float(x["end"])) if x.get("_m") else None for x in lines_w]
+                est_c = ctc_starts(lines, v, s0, s0, s1)
             timing += [dict(t, clip=c["id"]) for t in combine_timing(lines, est_w, est_c, speech_on(v, s0), s0, s1)]
         for ln in lines:
             ln.pop("_m", None)
@@ -261,7 +266,9 @@ def cmd_align(a):
         print(f"  時刻合わせ: 声だけWhisper {by.get('W', 0)}行・強制アライメント {by.get('C', 0)}行・従来 {by.get('O', 0)}行"
               f" ／ 早すぎた行を {len(later)}行 遅らせて修正")
     if not getattr(a, "no_speakers", False) and ml and (spec.get("package") or {}).get("speaker_gender"):
-        _label_by_votes(wd, spec, src)
+        from .common import gpu_lock
+        with gpu_lock("話者判定"):
+            _label_by_votes(wd, spec, src)
     elif not getattr(a, "no_speakers", False):
         from .diarize import label_lines
         from .progress import current
@@ -449,7 +456,9 @@ def cmd_prepare(a):
             if not done("transcript.json"):
                 prog.start("transcribe")
                 terms = [meta.get("uploader") or ""] + [c["title"] for c in meta.get("chapters") or [] if c.get("title")]
-                transcribe(wd, source_path(wd), glossary(), "large-v3", "auto", "、".join(t for t in terms if t))
+                from .common import gpu_lock
+                with gpu_lock("文字起こし"):
+                    transcribe(wd, source_path(wd), glossary(), "large-v3", "auto", "、".join(t for t in terms if t))
             prog.done("transcribe")
             if not done("candidates.json"):
                 prog.start("analyze")

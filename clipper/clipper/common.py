@@ -35,6 +35,51 @@ def style(path=None):
     return load_yaml(path or os.path.join(ROOT, "config", "style.yaml"))
 
 
+class gpu_lock:
+    """Cross-process lock around GPU-heavy stages (transcribe, voice stems + alignment, qc ASR).
+    Two clipper processes on one 12 GB GPU (prepare + an editing build) crashed the process
+    outright (exit 9) twice; taking turns costs minutes, a crash costs the whole queue."""
+
+    def __init__(self, what=""):
+        import tempfile
+        self.path = os.path.join(tempfile.gettempdir(), "clipper_gpu.lock")
+        self.what = what
+        self.fh = None
+
+    def __enter__(self):
+        import time
+        self.fh = open(self.path, "a+")
+        waited = False
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    self.fh.seek(0)
+                    msvcrt.locking(self.fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if not waited:
+                    print(f"  GPU の順番待ち（{self.what}）…", flush=True)
+                    waited = True
+                time.sleep(3)
+
+    def __exit__(self, *exc):
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.fh.seek(0)
+                msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.fh.close()
+        return False
+
+
 def default_work_root():
     """Where fetch creates one folder per video. Machine-local, so it lives outside git:
     env CLIPPER_WORK_ROOT, else config/local.yaml `work_root`, else clipper/work."""
