@@ -26,7 +26,9 @@ def video_key(url):
 def twitch_chat_gql(video_id, duration, step=600):
     """Twitch chat replay without TwitchDownloaderCLI, via the public web GQL endpoint
     (the same client id yt-dlp uses). Without a browser integrity token Twitch may return only a
-    sample of the comments, so treat the result as a weak signal. Returns [{t, text}]."""
+    sample of the comments, so treat the result as a weak signal. Observed 2026-11: each query
+    returned comments from across the whole VOD regardless of the offset, so querying every
+    `step` seconds and de-duplicating by id does not bunch them at offsets. Returns [{t, text}]."""
     import json
     import urllib.request
     q = ("query($id: ID!, $off: Int) { video(id: $id) { comments(contentOffsetSeconds: $off) { "

@@ -38,13 +38,15 @@ def _runs(text):
 def lift_dark(img, target=105.0, max_gain=2.2):
     """Night levels and horror games give near-black frames that vanish in a feed. When the mean
     luminance is low, brighten toward `target` (gamma-like, so highlights do not clip first)."""
+    import math
     from PIL import ImageStat
     mean = ImageStat.Stat(img.convert("L")).mean[0]
     if mean >= target * 0.8:
         return img
-    gain = min(max_gain, target / max(mean, 1.0))
-    gamma = 1.0 / gain ** 0.6
-    lut = [min(255, int(255 * (i / 255) ** gamma * gain ** 0.4 + 0.5)) for i in range(256)]
+    goal = min(target, mean * max_gain)
+    # Pure gamma: 255 stays 255 and bright HUD/faces compress instead of clipping to white.
+    gamma = max(0.35, math.log(goal / 255) / math.log(max(mean, 1.0) / 255))
+    lut = [int(255 * (i / 255) ** gamma + 0.5) for i in range(256)]
     return img.point(lut * 3)
 
 

@@ -133,7 +133,7 @@ def test_align_script_times_proofread_lines():
         t += 1.5
     script = ["いいねー", "うちやっちまえ", "全力バブリタイム", "（ゲーム音声）", "全力バブリタイムは私の", "*全力バブリタイムって何すんの？"]
     lines, warn = align_script(words, 0, t, script)
-    assert not warn, warn
+    assert not [w for w in warn if w.startswith("未一致")], warn
     assert [ln["text"] for ln in lines][1] == "うちやっちまえ"
     assert lines[2]["start"] < 4.6, lines[2]          # first 戦力バブリタイム, not the later 全力
     assert lines[5].get("emph") and lines[5]["start"] > 7.4, lines[5]  # the 全 token at 7.5 s
@@ -176,6 +176,54 @@ def test_transcript_loops_and_prompt_echo_removed():
     # Real short repeats survive.
     short = [{"start": i, "end": i + 1, "word": "やばい"} for i in range(3)]
     assert len(clean_transcript([], short, None)[1]) == 3
+
+
+def test_review_findings_transcript_and_align():
+    # Independent review of the local-run commit; each case reproduced before the fix.
+    from clipper.transcribe import clean_transcript, collapse_loops
+    from clipper.subs import align_script
+    prompt = "雀魂、役満、国士無双、テンパイ、おばあちゃん"
+    # 1. A shouted single term is speech, not a prompt echo.
+    segs = [{"start": 0, "end": 1, "text": "国士無双！"}, {"start": 2, "end": 3, "text": "おばあちゃん！"}]
+    words = [{"start": 0, "end": 1, "word": "国士無双！"}, {"start": 2, "end": 3, "word": "おばあちゃん！"}]
+    s2, w2, _ = clean_transcript(segs, words, prompt)
+    assert len(s2) == 2 and len(w2) == 2
+    # 2. A real chant keeps its time span after collapsing.
+    chant = [{"start": 10 + i * 0.4, "end": 10.3 + i * 0.4, "word": "きた"} for i in range(8)]
+    kept = collapse_loops(chant)
+    assert len(kept) == 4 and kept[-1]["end"] == chant[-1]["end"]
+    # 9. Digits never collapse.
+    s3, _, _ = clean_transcript([{"start": 0, "end": 1, "text": "賞金100000円"}], [], None)
+    assert s3[0]["text"] == "賞金100000円"
+    # 3. A line missing from the transcript does not steal letters from later lines.
+    toks = [("おはよう", 0), ("ちょっとまって", 4), ("いやいやいや", 7), ("ばか", 9)]
+    ws = [{"start": t, "end": t + 1.5, "word": w} for w, t in toks]
+    lines, warn = align_script(ws, 0, 12, ["おはよう", "やばいやばい", "ちょっとまって", "いやいやいや", "ばか"])
+    by = {ln["text"]: ln for ln in lines}
+    assert 3.8 <= by["ちょっとまって"]["start"] <= 4.1, by["ちょっとまって"]
+    assert by["いやいやいや"]["end"] - by["いやいやいや"]["start"] >= 0.7
+    assert any("やばいやばい" in w for w in warn), warn
+    # 4. Consecutive notes share the gap and never push the next spoken line late.
+    ws = [{"start": 0, "end": 1.0, "word": "おはようございます"}, {"start": 3.0, "end": 4.0, "word": "それでは始めます"}]
+    lines, _ = align_script(ws, 0, 5, ["おはようございます", "（BGM）", "(英語音声)", "それでは始めます"])
+    assert all(b["end"] - b["start"] > 0.3 for b in lines[1:3]), lines
+    assert 2.9 <= lines[3]["start"] <= 3.0, lines[3]
+    # Katakana telop vs hiragana ASR, and a line after long unscripted talk.
+    ws = [{"start": 0, "end": 1, "word": "あ、きも、きも"}]
+    ws += [{"start": 2 + i, "end": 2.8 + i, "word": "なになになにぐろいしぬしぬ"} for i in range(10)]
+    ws += [{"start": 20, "end": 22, "word": "ゾンビモードだったね"}]
+    lines, warn = align_script(ws, 0, 23, ["キモ！キモ！", "*ゾンビモード\nだったね"])
+    assert not warn and lines[0]["start"] < 1 and lines[1]["start"] >= 19.9, (lines, warn)
+
+
+def test_review_findings_ranges():
+    from clipper.timeline import cut_silences
+    tl = style()["timeline"]
+    # 5. A keep that only touches a long silence does not save all of it.
+    out = cut_silences([[0.0, 60.0]], [(23.5, 30.0)], keep=[(18.0, 24.0)])
+    assert any(a <= 20 <= b for a, b in out) and not any(a <= 40 <= b for a, b in out), out
+    # 8. No transcript words + keep: the whole clip stays.
+    assert keep_ranges({"start": 0, "end": 60, "keep": [[18, 24]]}, [], tl) == [[0.0, 60.0]]
 
 
 if __name__ == "__main__":

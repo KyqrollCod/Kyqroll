@@ -82,7 +82,7 @@ def transcribe(wd, src, gl, model_name="large-v3", device="auto", prompt=None, b
 
 
 _PUNCT = re.compile(r"[\s、。,.!！?？・…ー〜~]")
-_LOOP = re.compile(r"(.{1,16}?)\1{4,}")
+_LOOP = re.compile(r"(\D{2,16}?)\1{4,}")  # never digits: 100000 must stay 100000
 
 
 def _norm(t):
@@ -109,7 +109,10 @@ def collapse_loops(words, keep=4, max_unit=12):
                 best = (r, k)
         if best:
             r, k = best
-            out += words[i:i + keep * k]
+            kept = [dict(w) for w in words[i:i + keep * k]]
+            # The time stays spoken: a real chant must not be trimmed as silence later.
+            kept[-1]["end"] = max(kept[-1]["end"], words[i + r * k - 1]["end"])
+            out += kept
             i += r * k
         else:
             out.append(words[i])
@@ -126,10 +129,12 @@ def clean_transcript(segs, words, prompt=None):
     keep_segs = []
     for s in segs:
         t = _norm(s["text"])
-        rest = t
+        rest, hits = t, 0
         for p in phrases:
+            hits += rest.count(p)
             rest = rest.replace(p, "")
-        if phrases and t and not rest:
+        # An echo is long and repeats the prompt; a shouted single term (「国士無双！」) is speech.
+        if phrases and t and not rest and len(t) >= 12 and hits >= 2:
             echo.append((s["start"], s["end"]))
             continue
         s = dict(s, text=_LOOP.sub(lambda m: m.group(1) * 4, s["text"]))

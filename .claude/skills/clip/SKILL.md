@@ -46,6 +46,9 @@ as a comma list of the streamer's name, the game and its terms. Never a sentence
 echoes a sentence prompt back as speech. Repetition loops and prompt echoes are dropped
 automatically (the log says how many words). Twitch chat comes through the public GQL endpoint
 when TwitchDownloaderCLI is absent. It is often a sparse sample, so treat it as a weak signal.
+Transcription is reproducible for the same prompt, but a different prompt yields a different
+transcript, with other token splits and timings. Once `script:` lines are aligned and QC passes,
+do not re-transcribe with a new prompt. Fix names in the script instead.
 
 **When scores are flat** (no chat, a reaction-heavy game), the candidate list is a weak guide.
 Read `transcript.txt` end to end (a 3-hour stream is about 20k chars) and pick moments yourself.

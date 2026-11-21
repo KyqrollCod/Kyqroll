@@ -41,6 +41,8 @@ def keep_ranges(clip, words, tl):
     if not clip.get("trim_silence", True):
         return [[start, end]]
     sp = speech_ranges(words, start, end, tl)
+    if not sp:
+        return [[start, end]]  # no transcript here: keep everything, not just the `keep` spans
     forced = sorted([max(start, float(a)), min(end, float(b))] for a, b in (clip.get("keep") or []))
     if forced:
         merged = []
@@ -80,9 +82,20 @@ def cut_silences(ranges, silences, keep=(), margin=0.2, min_len=1.0, min_segment
         a, b = s + margin, s + d - margin
         if d < min_len or b <= a:
             continue
-        if any(ka < b and a < kb for ka, kb in keep):
-            continue
-        cuts.append((a, b))
+        # Subtract the forced keeps from the cut; what is left of a long silence is still cut.
+        parts = [(a, b)]
+        for ka, kb in sorted(keep):
+            nxt = []
+            for pa, pb in parts:
+                if kb <= pa or ka >= pb:
+                    nxt.append((pa, pb))
+                    continue
+                if ka - pa >= min_len - 2 * margin:
+                    nxt.append((pa, ka))
+                if pb - kb >= min_len - 2 * margin:
+                    nxt.append((kb, pb))
+            parts = nxt
+        cuts += parts
     out = []
     for ra, rb in ranges:
         pieces = [[ra, rb]]

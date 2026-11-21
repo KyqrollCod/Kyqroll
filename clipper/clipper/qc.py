@@ -3,7 +3,7 @@ import os
 import re
 
 from .common import media_info, need, run
-from .subs import dw
+from .subs import dw, is_note
 
 
 def _parse_intervals(err, kind):
@@ -66,7 +66,7 @@ def asr_sync(path, ass_path, model="medium"):
     for a, b, text in events:
         heard = "".join(w.word for w in words if a - 0.4 <= (w.start + w.end) / 2 <= b + 0.4)
         t, h = _norm(text), _norm(heard)
-        if not t or (text.startswith("（") and text.endswith("）")):
+        if not t or is_note(text):
             continue  # （…） is a translation of game/English audio, not a transcript of speech
         checked += 1
         sm = difflib.SequenceMatcher(None, t, h)
