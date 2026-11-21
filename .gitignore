@@ -5,3 +5,5 @@ clipper/work/
 clipper/out/
 clipper/config/local.yaml
 clipper/models/
+clipper/assets/bgm/
+clipper/assets/se/*.wav
