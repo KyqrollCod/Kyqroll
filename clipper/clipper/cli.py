@@ -116,6 +116,9 @@ def cmd_render(a):
     out_dir = os.path.join(wd, "out")
     os.makedirs(out_dir, exist_ok=True)
     from .progress import current
+    solo = _solo_progress(wd, f"{os.path.basename(wd)} の書き出し",
+                          [(f"r:{c['id']}", f"書き出し {c['id']}", 10 + 0.35 * (float(c['end']) - float(c['start'])))
+                           for c in _clips(wd, a.only)])
     reports = []
     for c in _clips(wd, a.only):
         out = os.path.join(out_dir, f"{c['id']}.mp4")
@@ -131,8 +134,29 @@ def cmd_render(a):
                                             c.get("thumbnail_sticker"))
         reports.append(r)
         print(f"  {r['id']}: {r['duration']}s ({r['segments']} segments, -{r['removed_sec']}s) -> {out}")
-    save_json(os.path.join(out_dir, "render.json"), reports)
+    _merge_json(os.path.join(out_dir, "render.json"), reports, lambda r: r["id"])
+    if solo:
+        solo.finish(True, f"{len(reports)}本を書き出しました")
+        from .site import refresh
+        refresh(wd)
     return reports
+
+
+def _merge_json(path, new, key):
+    """Replace the entries for what was just processed; keep the rest (runs with --only)."""
+    old = load_json(path) if os.path.exists(path) else []
+    done = {key(r) for r in new}
+    save_json(path, [r for r in old if key(r) not in done] + list(new))
+
+
+def _solo_progress(wd, title, steps):
+    """render/qc run on their own still get a progress page (build makes its own)."""
+    from .progress import Progress, current
+    if current():
+        return None
+    p = Progress(wd, title, steps)
+    print(f"  進捗ページ: {os.path.join(wd, 'progress.html')}", flush=True)
+    return p
 
 
 def cmd_qc(a):
@@ -147,6 +171,9 @@ def cmd_qc(a):
     if not clips:
         print("  FAIL: clips.yaml に検査するクリップがありません")
         return False
+    solo = _solo_progress(wd, f"{os.path.basename(wd)} の品質チェック",
+                          [(f"q:{c['id']}", f"品質チェック {c['id']}", 20 + 0.08 * (float(c['end']) - float(c['start'])))
+                           for c in clips])
     for c in clips:
         path = os.path.join(out_dir, f"{c['id']}.mp4")
         if not os.path.exists(path):
@@ -169,7 +196,11 @@ def cmd_qc(a):
             hard = [x["name"] for x in r["checks"] if not x["ok"] and x.get("hard", True)]
             prog.done(f"q:{c['id']}", "合格" if r["pass"] else "不合格: " + ", ".join(hard), ok=r["pass"])
         print(f"  {c['id']}: {'PASS' if r['pass'] else 'FAIL'}" + ("".join(f"\n      - {b}" for b in bad)))
-    save_json(os.path.join(out_dir, "qc.json"), results)
+    _merge_json(os.path.join(out_dir, "qc.json"), results, lambda r: os.path.basename(r["file"]))
+    if solo:
+        solo.finish(ok, "全クリップ合格" if ok else "不合格のクリップがあります")
+        from .site import refresh
+        refresh(wd)
     return ok
 
 
@@ -250,6 +281,8 @@ def cmd_build(a):
               for c in clips]
     prog = Progress(wd, f"{os.path.basename(wd)} の書き出し", steps)
     print(f"  進捗ページ: {os.path.join(wd, 'progress.html')}", flush=True)
+    from .site import refresh
+    refresh(wd)  # the video page shows a "処理中" banner linking to progress.html
     try:
         prog.start("align")
         if not cmd_align(a):
@@ -271,6 +304,24 @@ def cmd_build(a):
     except Exception as e:
         prog.finish(False, f"エラー: {e}"[:300])
         raise
+    finally:
+        refresh(wd)
+
+
+def cmd_site(a):
+    from .common import default_work_root
+    from .site import write_index, write_video_page
+    if a.work:
+        wd = work_dir(a.work)
+        print(write_video_page(wd))
+        print(write_index(os.path.dirname(wd)))
+        return
+    root = default_work_root()
+    for n in sorted(os.listdir(root)):
+        wd = os.path.join(root, n)
+        if os.path.isdir(wd) and os.path.exists(os.path.join(wd, "meta.json")):
+            print(write_video_page(wd))
+    print(write_index(root))
 
 
 def cmd_calibrate(a):
@@ -328,6 +379,9 @@ def main(argv=None):
     s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--asr", nargs="?", const="large-v3", default="large-v3")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_build(a) else 1))
+    s = sub.add_parser("site", help="一覧ページ・動画ページ・delivery.md を作り直す（省略時は全動画）")
+    s.add_argument("work", nargs="?", default=None)
+    s.set_defaults(f=cmd_site)
     s = sub.add_parser("align"); s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--no-speakers", action="store_true", help="話者の色分けをしない")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_align(a) else 1))

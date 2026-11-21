@@ -97,7 +97,7 @@ class Progress:
         got = sum(s["est"] * (1.0 if s["state"] in ("ok", "ng") else s["frac"]) for s in self.steps)
         frac = got / tot
         el = time.time() - self.t0
-        eta = el / frac * (1 - frac) if frac > 0.03 and not self.result else None
+        eta = el / frac * (1 - frac) if frac > 0.03 and el > 8 and not self.result else None
         return frac, el, eta
 
     def write(self):
@@ -132,20 +132,27 @@ class Progress:
                 f"<tr class='{s['state']}'><td>{icon[s['state']]}</td><td>{html.escape(s['label'])}</td>"
                 f"<td><div class='bar'><i style='width:{pct}%'></i></div></td><td>{pct}%</td>"
                 f"<td>{word[s['state']]}</td><td>{took}</td><td>{html.escape(s['note'])}</td></tr>")
+        from .site import CSS
         if d["result"]:
-            head = ("✅ 完了" if d["result"][0] == "ok" else "❌ 停止") + f"　{html.escape(d['result'][1])}"
+            ok = d["result"][0] == "ok"
+            head = (f"<span class='tag {'ok' if ok else 'ng'}'>{'完了' if ok else '停止'}</span> "
+                    f"{html.escape(d['result'][1])}")
             refresh = ""
         else:
-            head = f"実行中　全体 {int(d['overall'] * 100)}%　残り目安 {_fmt(eta) if eta else '計算中'}"
+            head = (f"<span class='tag warn'>実行中</span> 全体 <b>{int(d['overall'] * 100)}%</b>"
+                    f"　残り目安 <b>{_fmt(eta) if eta else '計算中'}</b>")
             refresh = "<meta http-equiv='refresh' content='3'>"
+        extra = """.bar{background:#262b36;height:10px;border-radius:5px;overflow:hidden;width:100%;min-width:60px}
+.bar.big{height:14px;margin:10px 0 18px}
+.bar i{display:block;height:100%;background:var(--accent)}tr.ok .bar i{background:var(--ok)}tr.ng .bar i{background:var(--ng)}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}td:nth-child(3){width:40%}
+td:last-child{white-space:normal;color:var(--sub);font-size:12px}tr.run td{background:#1d2a38}tr.wait td{color:var(--sub)}
+.top{font-size:16px}@media(max-width:600px){td:nth-child(6),td:nth-child(7){display:none}td{padding:7px 6px}}"""
         return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">{refresh}
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>進捗 {html.escape(self.title)}</title>
-<style>body{{font-family:'Yu Gothic UI',Meiryo,sans-serif;margin:16px;background:#111;color:#eee}}
-h1{{font-size:18px;margin:0 0 4px}} .sub{{color:#aaa;font-size:13px;margin-bottom:12px}}
-.top{{font-size:20px;margin:8px 0 12px}} .bar{{background:#333;height:10px;border-radius:5px;overflow:hidden;width:180px}}
-.bar i{{display:block;height:100%;background:#3ea8ff}} tr.ok .bar i{{background:#6edb5a}} tr.ng .bar i{{background:#ff5050}}
-table{{border-collapse:collapse;font-size:14px}} td{{padding:4px 8px;border-bottom:1px solid #2a2a2a}}
-tr.run td{{background:#1d2a38}} tr.wait td{{color:#888}}</style></head><body>
-<h1>{html.escape(self.title)}</h1><div class="sub">最終更新 {d['updated']}　経過 {_fmt(el)}（3秒ごとに自動更新）</div>
-<div class="top">{head}</div><div class="bar" style="width:100%;height:14px"><i style="width:{int(d['overall'] * 100)}%"></i></div><br>
-<table>{''.join(rows)}</table></body></html>"""
+<style>{CSS}{extra}</style></head><body>
+<header><a class="crumb" href="../index.html">← 一覧</a><a class="crumb" href="index.html">動画ページ</a>
+<h1>{html.escape(self.title)}</h1><span class="crumb">最終更新 {d['updated']}・経過 {_fmt(el)}・3秒ごとに自動更新</span></header>
+<main><div class="top">{head}</div><div class="bar big" style="min-width:0"><i style="width:{int(d['overall'] * 100)}%"></i></div>
+<table>{''.join(rows)}</table></main></body></html>"""
