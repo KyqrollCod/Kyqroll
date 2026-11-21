@@ -52,6 +52,17 @@ run it again; don't chain the steps by hand.
 source, transcript, chat, clips.src.yaml and out/ (MP4, thumbnails, sheets, delivery.md).
 Later edits happen in the same folder.
 
+**Pages.** `build`, `render` and `qc` write `progress.html` while running and regenerate the
+pages when done (`python -m clipper site` does it by hand):
+- `<root>/index.html`: a card per video
+- `<video>/index.html`: players, titles, descriptions and hashtags with copy buttons, the QC
+  result, and the speaker legend
+- `out/delivery.md`
+Keep titles and descriptions in clips.src.yaml (`package:` holds the credit, hashtags and
+speaker names; each clip has `title` and `description`). Do not edit delivery.md by hand. The
+owner watches background runs through these pages, so always start long runs via build, render
+or qc and point them to http://localhost:8765/.
+
 **Speakers.** `align` labels every telop line 読み上げ / 男性 / 女性 and colors it from
 `style.yaml` speakers. 読み上げ means the line is a chat message (the TTS bot reads chat
 verbatim). Otherwise pitch decides when clear (<165 Hz / >230 Hz), and the voice embedding
