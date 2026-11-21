@@ -65,20 +65,32 @@ def video_folder(work_root, key, info=None):
     return os.path.join(work_root, "_".join(p for p in parts if p))
 
 
-def fetch(url, work_root=None, cookies_from_browser=None, max_height=1080):
+def probe(url, cookies_from_browser=None):
+    import yt_dlp
+    opts = {"quiet": True, "skip_download": True, "noplaylist": True}
+    if cookies_from_browser:
+        opts["cookiesfrombrowser"] = (cookies_from_browser,)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+def fetch(url, work_root=None, cookies_from_browser=None, max_height=1080, on_progress=None, head=None):
     import yt_dlp  # imported here so render-only use needs no yt-dlp
     from .common import default_work_root
 
     work_root = work_root or default_work_root()
     key = video_key(url)
-    probe = {"quiet": True, "skip_download": True, "noplaylist": True}
-    if cookies_from_browser:
-        probe["cookiesfrombrowser"] = (cookies_from_browser,)
-    with yt_dlp.YoutubeDL(probe) as ydl:
-        head = ydl.extract_info(url, download=False)
+    head = head or probe(url, cookies_from_browser)
     wd = video_folder(work_root, key, head)
     os.makedirs(wd, exist_ok=True)
+
+    def hook(d):
+        if on_progress and d.get("status") == "downloading":
+            tot = d.get("total_bytes") or d.get("total_bytes_estimate")
+            if tot:
+                on_progress(min(0.99, d.get("downloaded_bytes", 0) / tot))
     opts = {
+        "progress_hooks": [hook],
         "outtmpl": os.path.join(wd, "source.%(ext)s"),
         "format": f"bv*[height<={max_height}]+ba/b[height<={max_height}]/bv*+ba/b",
         "merge_output_format": "mp4",
@@ -88,7 +100,8 @@ def fetch(url, work_root=None, cookies_from_browser=None, max_height=1080):
         "noplaylist": True,
         "concurrent_fragment_downloads": 8,
         "retries": 10,
-        "quiet": False,
+        "quiet": True,
+        "noprogress": True,
     }
     if cookies_from_browser:
         opts["cookiesfrombrowser"] = (cookies_from_browser,)
@@ -96,6 +109,8 @@ def fetch(url, work_root=None, cookies_from_browser=None, max_height=1080):
         info = ydl.extract_info(url, download=True)
     meta = {k: info.get(k) for k in ("id", "title", "channel", "uploader", "duration", "upload_date",
                                      "webpage_url", "extractor_key", "fps", "width", "height")}
+    meta["chapters"] = [{"start": c.get("start_time"), "end": c.get("end_time"), "title": c.get("title")}
+                        for c in info.get("chapters") or []]   # Twitch: the game per section
     save_json(os.path.join(wd, "meta.json"), meta)
 
     raw = next((os.path.join(wd, n) for n in os.listdir(wd) if n.endswith(".live_chat.json")), None)

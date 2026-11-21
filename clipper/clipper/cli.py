@@ -414,6 +414,61 @@ def cmd_build(a):
         refresh(wd)
 
 
+def cmd_prepare(a):
+    """Everything before the editorial pass, for one or more VODs in order: download (video + chat)
+    → transcribe (prompt = streamer + the games in the chapters) → analyze → transcript.txt.
+    Each video gets a progress page; finished steps are skipped on a re-run."""
+    from .analyze import analyze
+    from .common import default_work_root
+    from .fetch import fetch, probe, video_folder, video_key
+    from .progress import Progress
+    from .site import refresh
+    from .transcribe import transcribe
+    root = a.work_root or default_work_root()
+    ok = True
+    for url in a.urls:
+        try:
+            head = probe(url, a.cookies_from_browser)
+            wd = video_folder(root, video_key(url), head)
+            os.makedirs(wd, exist_ok=True)
+            dur = float(head.get("duration") or 3600)
+            done = lambda n: os.path.exists(os.path.join(wd, n))  # noqa: E731
+            prog = Progress(wd, f"{os.path.basename(wd)} の準備（取得・文字起こし・分析）",
+                            [("fetch", "動画とチャットの取得", 0.12 * dur), ("transcribe", "文字起こし", 0.02 * dur),
+                             ("analyze", "見どころの分析", 0.01 * dur + 20)])
+            print(f"== {head.get('title')}  ({os.path.basename(wd)})", flush=True)
+            if not done("meta.json"):   # provisional, so the list page shows the video while it downloads
+                save_json(os.path.join(wd, "meta.json"), {k: head.get(k) for k in (
+                    "id", "title", "uploader", "duration", "upload_date", "webpage_url")})
+            refresh(wd)
+            if not any(n == "source.mp4" for n in os.listdir(wd)):
+                prog.start("fetch")
+                fetch(url, root, a.cookies_from_browser, on_progress=lambda f: prog.set_frac("fetch", f), head=head)
+            prog.done("fetch")
+            meta = load_json(os.path.join(wd, "meta.json"))
+            if not done("transcript.json"):
+                prog.start("transcribe")
+                terms = [meta.get("uploader") or ""] + [c["title"] for c in meta.get("chapters") or [] if c.get("title")]
+                transcribe(wd, source_path(wd), glossary(), "large-v3", "auto", "、".join(t for t in terms if t))
+            prog.done("transcribe")
+            if not done("candidates.json"):
+                prog.start("analyze")
+                src = source_path(wd)
+                analyze(wd, src, media_info(src)["duration"], style(), glossary())
+            tr = load_json(os.path.join(wd, "transcript.json"))
+            with open(os.path.join(wd, "transcript.txt"), "w", encoding="utf-8") as fh:
+                for s in tr["segments"]:
+                    t = int(s["start"])
+                    fh.write(f"[{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d} {s['start']:.1f}] {s['text']}\n")
+            prog.done("analyze")
+            prog.finish(True, "準備完了：編集（場面選び・テロップ）に進めます")
+            refresh(wd)
+        except Exception as e:  # one bad VOD must not stop the queue
+            ok = False
+            print(f"  失敗: {url}: {e}", flush=True)
+    return ok
+
+
 def cmd_site(a):
     from .common import default_work_root
     from .site import write_index, write_video_page
@@ -491,6 +546,11 @@ def main(argv=None):
     s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--asr", nargs="?", const="large-v3", default="large-v3")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_build(a) else 1))
+    s = sub.add_parser("prepare", help="取得→文字起こし→分析を複数の配信URLについて順に（済んだ工程は飛ばす）")
+    s.add_argument("urls", nargs="+")
+    s.add_argument("--work-root", default=None)
+    s.add_argument("--cookies-from-browser", default=None)
+    s.set_defaults(f=lambda a: sys.exit(0 if cmd_prepare(a) else 1))
     s = sub.add_parser("site", help="一覧ページ・動画ページ・delivery.md を作り直す（省略時は全動画）")
     s.add_argument("work", nargs="?", default=None)
     s.set_defaults(f=cmd_site)
