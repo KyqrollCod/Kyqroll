@@ -35,5 +35,14 @@ if (Have "nvidia-smi") {
     Write-Host "GPU が見つかりません。文字起こしは CPU で動きます（遅くなります）。"
 }
 
+# Speaker colors: sherpa-onnx + wespeaker model (skipped gracefully by clipper if missing).
+python -m pip install sherpa-onnx; Check "sherpa-onnx のインストール"
+$model = Join-Path $PSScriptRoot "models\wespeaker_en_voxceleb_resnet34.onnx"
+if (-not (Test-Path $model)) {
+    New-Item -ItemType Directory -Force (Split-Path $model) | Out-Null
+    curl.exe -sSL -o $model "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34.onnx"
+    Check "話者モデルのダウンロード"
+}
+
 python -c "import clipper.cli; print('clipper OK')"; Check "clipper の読み込み"
 ffmpeg -hide_banner -version | Select-Object -First 1
