@@ -23,6 +23,30 @@ def video_key(url):
     return "vod_" + re.sub(r"\W+", "_", url)[-24:]
 
 
+def twitch_chat_gql(video_id, duration, step=600):
+    """Twitch chat replay without TwitchDownloaderCLI, via the public web GQL endpoint
+    (the same client id yt-dlp uses). Without a browser integrity token Twitch may return only a
+    sample of the comments, so treat the result as a weak signal. Returns [{t, text}]."""
+    import json
+    import urllib.request
+    q = ("query($id: ID!, $off: Int) { video(id: $id) { comments(contentOffsetSeconds: $off) { "
+         "edges { node { id contentOffsetSeconds message { fragments { text } } } } } } }")
+    seen, msgs = set(), []
+    for off in range(0, int(duration) + step, step):
+        body = json.dumps({"query": q, "variables": {"id": video_id, "off": off}}).encode()
+        req = urllib.request.Request("https://gql.twitch.tv/gql", data=body, headers={
+            "Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            video = json.loads(r.read())["data"]["video"] or {}
+        for e in ((video.get("comments") or {}).get("edges") or []):
+            n = e["node"]
+            if n["id"] not in seen:
+                seen.add(n["id"])
+                msgs.append({"t": float(n["contentOffsetSeconds"]),
+                             "text": "".join(f.get("text") or "" for f in (n.get("message") or {}).get("fragments") or [])})
+    return sorted(msgs, key=lambda m: m["t"])
+
+
 def fetch(url, work_root, cookies_from_browser=None, max_height=1080):
     import yt_dlp  # imported here so render-only use needs no yt-dlp
 
@@ -53,6 +77,14 @@ def fetch(url, work_root, cookies_from_browser=None, max_height=1080):
     if not raw and key.startswith("tw_") and shutil.which("TwitchDownloaderCLI"):
         raw = os.path.join(wd, "twitch_chat.json")
         subprocess.run(["TwitchDownloaderCLI", "chatdownload", "--id", key[3:], "-o", raw], check=True)
+    if not raw and key.startswith("tw_"):
+        try:
+            msgs = twitch_chat_gql(key[3:], meta.get("duration") or 0)
+            raw = os.path.join(wd, "twitch_chat.json")
+            save_json(raw, msgs)
+            print(f"chat: {len(msgs)} messages (Twitch GQL)")
+        except Exception as e:  # chat is optional; analysis still runs on audio and transcript
+            print(f"chat: skipped ({e})")
     if raw:
         save_json(os.path.join(wd, "chat.json"), normalize_chat(raw))
     return wd

@@ -4,6 +4,7 @@
   python -m clipper transcribe WORK            # ② 文字起こし（GPUがあれば自動で使用）
   python -m clipper analyze WORK               # ③ 見どころ候補 → candidates.md
   python -m clipper draft WORK --pick 1,2,3    # ④ 候補から clips.yaml を下書き（字幕つき）
+  python -m clipper align WORK [--only c01]    # 校正した script（テロップ文）に時刻を付けて subs を作る
   python -m clipper render WORK [--only c01]   # ⑤ 書き出し → WORK/out/
   python -m clipper qc WORK                    # ⑥ 品質チェック → WORK/out/qc.json と一覧画像
   python -m clipper run URL --pick 1-5         # ①〜⑥を通しで
@@ -45,7 +46,8 @@ def cmd_fetch(a):
 def cmd_transcribe(a):
     from .transcribe import transcribe
     wd = work_dir(a.work)
-    out = transcribe(wd, source_path(wd), glossary(), a.model, a.device)
+    out = transcribe(wd, source_path(wd), glossary(), a.model, a.device,
+                     getattr(a, "prompt", None), getattr(a, "batch", None))
     print(f"{len(out['words'])} words, device={out['device']}")
 
 
@@ -157,6 +159,27 @@ def cmd_qc(a):
     return ok
 
 
+def cmd_align(a):
+    """clips.yaml: for every clip with `script:` (proofread telop lines), (re)build `subs` with timings."""
+    from .render import load_words
+    from .subs import align_script
+    wd = work_dir(a.work)
+    path = os.path.join(wd, "clips.yaml")
+    spec = load_yaml(path)
+    words = load_words(wd)
+    keep = set(a.only.split(",")) if a.only else None
+    bad = False
+    for c in spec.get("clips", []):
+        if not c.get("script") or (keep and c["id"] not in keep):
+            continue
+        lines, warn = align_script(words, float(c["start"]), float(c["end"]), c["script"])
+        c["subs"] = lines
+        print(f"  {c['id']}: {len(lines)} lines" + "".join(f"\n      - {w}" for w in warn))
+        bad |= bool(warn)
+    save_yaml(path, spec)
+    return not bad
+
+
 def cmd_calibrate(a):
     wd = work_dir(a.work)
     out = os.path.join(wd, f"frame_{int(a.at)}.png")
@@ -196,6 +219,8 @@ def main(argv=None):
     def asr_args(s):
         s.add_argument("--model", default="large-v3")
         s.add_argument("--device", default="auto")
+        s.add_argument("--prompt", default=None, help="Whisper の事前プロンプト（配信者名・ゲーム用語）。省略時は glossary の terms")
+        s.add_argument("--batch", type=int, default=None, help="バッチ推論の大きさ（GPU既定16、1で逐次）")
 
     s = sub.add_parser("fetch"); fetch_args(s); s.set_defaults(f=cmd_fetch)
     s = sub.add_parser("transcribe"); s.add_argument("work"); asr_args(s); s.set_defaults(f=cmd_transcribe)
@@ -206,6 +231,8 @@ def main(argv=None):
     s = sub.add_parser("qc"); s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--asr", nargs="?", const="medium", default=None, help="書き出した動画を再度文字起こしして字幕の同期を検証")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_qc(a) else 1))
+    s = sub.add_parser("align"); s.add_argument("work"); s.add_argument("--only")
+    s.set_defaults(f=lambda a: sys.exit(0 if cmd_align(a) else 1))
     s = sub.add_parser("calibrate"); s.add_argument("work"); s.add_argument("--at", type=float, default=600); s.set_defaults(f=cmd_calibrate)
     s = sub.add_parser("run"); fetch_args(s); asr_args(s); s.add_argument("--pick", default="")
     s.add_argument("--formats", default="short"); s.set_defaults(f=cmd_run)

@@ -35,10 +35,23 @@ def _runs(text):
     return out
 
 
+def lift_dark(img, target=105.0, max_gain=2.2):
+    """Night levels and horror games give near-black frames that vanish in a feed. When the mean
+    luminance is low, brighten toward `target` (gamma-like, so highlights do not clip first)."""
+    from PIL import ImageStat
+    mean = ImageStat.Stat(img.convert("L")).mean[0]
+    if mean >= target * 0.8:
+        return img
+    gain = min(max_gain, target / max(mean, 1.0))
+    gamma = 1.0 / gain ** 0.6
+    lut = [min(255, int(255 * (i / 255) ** gamma * gain ** 0.4 + 0.5)) for i in range(256)]
+    return img.point(lut * 3)
+
+
 def make_thumbnail(src, t, text, st, out_path, sticker=None):
     th = st["thumbnail"]
     W, H = th["size"]
-    img = _cover(grab_frame(src, t), W, H)
+    img = _cover(lift_dark(grab_frame(src, t)), W, H)
     d = ImageDraw.Draw(img)
     bh = th["band_h"]
     d.rectangle([0, 0, W, bh], fill=th["band_color"])

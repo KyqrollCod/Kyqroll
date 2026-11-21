@@ -30,13 +30,26 @@ Never try to get around YouTube's bot check from a server.
 
 ```
 python -m clipper fetch URL --cookies-from-browser chrome   # → work/<id>/source.mp4, chat.json
-python -m clipper transcribe work/<id>                      # → transcript.json (large-v3, GPU auto)
+python -m clipper transcribe work/<id> --prompt "配信者名、ゲーム名、用語"  # → transcript.json
 python -m clipper analyze work/<id>                         # → candidates.md / candidates.json
 python -m clipper draft work/<id> --pick 1-8 --formats short,long   # → clips.yaml (auto telops)
 #   ↓ Claude edits clips.yaml (the editorial pass below)
+python -m clipper align work/<id>                           # script: → timed subs
 python -m clipper render work/<id>                          # → work/<id>/out/*.mp4, *_thumb.jpg
-python -m clipper qc work/<id> --asr                        # → out/qc.json, out/*_sheet.png
+python -m clipper qc work/<id> --asr large-v3               # → out/qc.json, out/*_sheet.png
 ```
+
+Set `$env:CLIPPER_PRESET="veryfast"` for drafts (a 7-min long renders in ~2 min).
+
+**Transcribe.** Batched large-v3 on a GPU: 3 h of audio in ~2 min (RTX 4070 Ti). Pass `--prompt`
+as a comma list of the streamer's name, the game and its terms. Never a sentence: Whisper
+echoes a sentence prompt back as speech. Repetition loops and prompt echoes are dropped
+automatically (the log says how many words). Twitch chat comes through the public GQL endpoint
+when TwitchDownloaderCLI is absent. It is often a sparse sample, so treat it as a weak signal.
+
+**When scores are flat** (no chat, a reaction-heavy game), the candidate list is a weak guide.
+Read `transcript.txt` end to end (a 3-hour stream is about 20k chars) and pick moments yourself.
+Check frames with `calibrate` or an ffmpeg tile before fixing a window.
 
 ## The editorial pass (the part that makes it good)
 
@@ -53,7 +66,10 @@ horizontal video for the best 1–2 of the stream.
 situation in ≤3 s) and the end lands on the payoff plus 0.5–1.5 s of reaction. Shorts:
 20–60 s is the sweet spot, 179 s hard max. Horizontal: one story per video, 6–10 minutes
 (the reference channel uses a fixed ~8:00), or 20–30 min for a 【伝説回】compilation.
-Use `segments: [[a,b], ...]` to drop tangents inside a window.
+Use `segments: [[a,b], ...]` to drop tangents inside a window. Silence trimming keeps only
+speech, so a silent visual payoff (a game-over screen, a monster reveal) needs
+`keep: [[a,b]]` or it is cut. Audible dead air over 1 s is also cut from the audio itself,
+because Whisper can stretch one token across a pause.
 
 **Text on screen (Shorts).**
 - `band_text` (top band): the theme or collab, ≤8 chars. 「ちいかわ×麻雀」「雀魂×役満」
@@ -65,7 +81,15 @@ Use `segments: [[a,b], ...]` to drop tangents inside a window.
 - `se`: sound effect on the payoff, only files in `clipper/assets/se/` (licensed ones only).
 - `overlays`: reaction images, only from `clipper/assets/images/` (licensed ones only).
 
-**Telops (`subs`).** Proofread every line against the audio context and `glossary.yaml`:
+**Telops (`script` → `align`).** Whisper's Japanese word timestamps split tokens mid-word
+(「いいねーう」「ちやっちまえ」), so auto `subs` need fixing line by line. Instead, write the
+corrected lines in order under `script:` and run `align`, which times each line to the characters
+it matches and reports lines it could not find. Prefix `*` = emph. Put `\n` where a Short line
+should break (≤11 chars a row). A line in （…） is a translation of game/English audio. It is
+timed by its neighbours and left out of the ASR sync check. Keep the authored file as
+`clips.src.yaml` and copy it over `clips.yaml` before `align`, because `align` rewrites `clips.yaml`.
+Drop any line the qc re-transcription does not hear rather than keep a guess.
+Proofread every line against the audio context and `glossary.yaml`:
 fix names, game terms and misheard words, remove fillers that add nothing (えー、あのー),
 keep the speaker's own tone (語尾 stays). Mark the punchline `emph: true`. Set `speaker` for
 collab clips and add each speaker's color under `short.speakers` / `long.speakers`.
@@ -80,7 +104,9 @@ Shorts titles add 3–4 fixed hashtags (`#麻雀 #役満 #雀魂 #shorts`). Chec
 `.claude/skills/yt-package/title.py` (concrete number/name, no vague adjectives).
 
 **Thumbnail (horizontal).** `thumbnail_text`: ≤10 chars, the key word in 『』 (rendered red):
-「バケモノ役満『ドラ一色』」. `thumbnail_at`: the frame of the payoff screen.
+「バケモノ役満『ドラ一色』」. `thumbnail_at`: the frame of the payoff screen, ideally with both
+characters in view. Dark frames are brightened automatically. When the game draws its own HUD
+top-left, leave the long-form `label` empty.
 
 ## Quality gate (all must hold before delivery)
 

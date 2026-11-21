@@ -115,6 +115,82 @@ def auto_lines(words, start, end, max_chars, gl, gap_break=0.35, max_lines=2):
     return lines
 
 
+_ALIGN_SKIP = re.compile(r"[\s、。,.!！?？…「」『』（）()・~〜ー\-]")
+
+
+def align_script(words, start, end, script):
+    """Time hand-written telop lines against the transcript.
+
+    Whisper's Japanese word timestamps put token boundaries mid-word (「いいねーう」「ちやっちまえ」),
+    so pause-based auto lines split words. Proofreading is easier as plain text: write the
+    corrected lines in order and this assigns each one the time of the characters it matches.
+    A line starting with '*' is emphasized; a line in （） is a translation/note (game voice) and is
+    timed by its neighbours, not matched. Returns (lines, warnings)."""
+    import difflib
+    ws = [w for w in words if w["end"] > start - 1 and w["start"] < end + 1 and w["word"].strip()]
+    chars, times = [], []
+    for w in ws:
+        t = _ALIGN_SKIP.sub("", w["word"])
+        if not t:
+            continue
+        span = max(0.01, w["end"] - w["start"])
+        for i, ch in enumerate(t):
+            chars.append(ch)
+            times.append((w["start"] + span * i / len(t), w["start"] + span * (i + 1) / len(t)))
+    stream = "".join(chars)
+    out, warn, cur = [], [], 0
+    for raw in script:
+        raw = str(raw).strip()
+        if not raw:
+            continue
+        emph = raw.startswith("*")
+        text = raw.lstrip("*").strip()
+        key = _ALIGN_SKIP.sub("", text)
+        note = text.startswith(("（", "(")) or not key
+        ln = {"text": text, "start": None, "end": None}
+        if emph:
+            ln["emph"] = True
+        if not note:
+            # Narrow window first: the longest-block matcher would otherwise jump to a later,
+            # better-transcribed repeat of the same phrase and desync every line after it.
+            for width in (int(len(key) * 1.5) + 8, len(key) * 3 + 60):
+                win_end = min(len(stream), cur + width)
+                sm = difflib.SequenceMatcher(None, key, stream[cur:win_end], autojunk=False)
+                blocks = [b for b in sm.get_matching_blocks() if b.size]
+                hit = sum(b.size for b in blocks)
+                if blocks and hit / len(key) >= 0.6:
+                    break
+            if blocks and hit / len(key) >= 0.5:
+                i0 = cur + blocks[0].b
+                i1 = cur + blocks[-1].b + blocks[-1].size - 1
+                ln["start"], ln["end"] = times[i0][0], times[i1][1]
+                cur = i1 + 1
+            else:
+                warn.append(f"未一致（{hit}/{len(key)}文字）: {text}")
+        out.append(ln)
+    # Notes and unmatched lines: fill the gap between their neighbours.
+    for i, ln in enumerate(out):
+        if ln["start"] is None:
+            prev_end = next((x["end"] for x in reversed(out[:i]) if x["end"] is not None), start)
+            nxt = next((x["start"] for x in out[i + 1:] if x["start"] is not None), end)
+            ln["start"], ln["end"] = prev_end, max(prev_end + 0.8, nxt)
+    for i in range(1, len(out)):  # keep events chronological
+        out[i]["start"] = max(out[i]["start"], out[i - 1]["start"])
+        out[i]["end"] = max(out[i]["end"], out[i]["start"] + 0.1)
+    # Same display rules as auto_lines: minimum time, hold through short gaps.
+    for ln in out:
+        ln["start"] = max(start, ln["start"] - 0.05)
+    for i, ln in enumerate(out):
+        nxt = out[i + 1]["start"] if i + 1 < len(out) else end
+        ln["end"] = min(nxt, ln["end"] + 0.25)
+        if ln["end"] - ln["start"] < 0.7:   # minimum on-screen time, never over the next line
+            ln["end"] = max(ln["end"], min(nxt, ln["start"] + 0.7))
+        if nxt - ln["end"] < 0.5:
+            ln["end"] = max(ln["end"], nxt)
+        ln["start"], ln["end"] = round(ln["start"], 2), round(min(end, ln["end"]), 2)
+    return out, warn
+
+
 HIRA = re.compile(r"[ぁ-ゖ]")
 NO_LINE_START = set("ー〜～、。！？!?…）」』ゃゅょっャュョッぁぃぅぇぉ・")
 PUNCT_END = set("、。！？!?…）」』・→ 　")
