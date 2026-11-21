@@ -191,6 +191,28 @@ def write_video_page(wd):
                 f"<div class='links'>{links}</div></div></div>")
         if cards:
             sections.append(f"<h2>{label}（{len(cards)}本）</h2><div class='grid {fmt}'>{''.join(cards)}</div>")
+    # Lines whose speaker the analysis was unsure about: one click plays that moment.
+    review_html = ""
+    rv_p = os.path.join(wd, "speaker_review.json")
+    if os.path.exists(rv_p):
+        review = load_json(rv_p)
+        rj = os.path.join(wd, "out", "render.json")
+        times = {r["id"]: r.get("line_times", {}) for r in (load_json(rj) if os.path.exists(rj) else [])}
+        items = []
+        for r in review:
+            t = times.get(r["clip"], {}).get(r["text"])
+            link = (f"<a href='out/{_u(r['clip'])}.mp4#t={max(0, t - 0.5):.1f}' target='_blank'>▶ {_dur(t)}</a>"
+                    if t is not None else "")
+            col = st["short"]["speakers"].get(r["speaker"], "#ccc")
+            items.append(f"<tr><td>{_e(r['clip'])}</td><td>{link}</td><td>{_e(r['text'])}</td>"
+                         f"<td><span style='color:{col}'>{_e(names.get(r['speaker'], r['speaker']))}</span></td>"
+                         f"<td>{int(r['conf'] * 100)}%</td></tr>")
+        if items:
+            review_html = (f"<details class='card' style='padding:10px 14px;margin-bottom:18px'><summary>"
+                           f"話者の確認候補 {len(items)}行（自動判定の自信が低い行。違っていたら行を教えてください）"
+                           f"</summary><table style='width:100%;margin-top:8px;font-size:13px'>"
+                           f"<tr style='color:var(--sub)'><td>クリップ</td><td>位置</td><td>テロップ</td><td>判定</td>"
+                           f"<td>自信</td></tr>{''.join(items)}</table></details>")
     passed = sum(1 for r in rows if r["qc"] and r["qc"].get("pass"))
     info = "".join(f"<span>{k} <b>{_e(v)}</b></span>" for k, v in (
         ("配信者", pkg.get("streamer") or meta.get("uploader")), ("コラボ", pkg.get("collab")),
@@ -202,7 +224,7 @@ def write_video_page(wd):
     head = (f"<a class='crumb' href='../index.html'>← 一覧</a><h1>{_e(meta.get('title') or name)}</h1>"
             f"<span class='crumb'>{_e(name)}</span>")
     body = (banner + f"<div class='meta'>{info}</div>"
-            + (f"<div class='legend'>字幕の色：{legend}</div>" if legend else "") + "".join(sections))
+            + (f"<div class='legend'>字幕の色：{legend}</div>" if legend else "") + review_html + "".join(sections))
     with open(os.path.join(wd, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(_page(meta.get("title") or name, head, body, refresh=5 if banner else None))
     write_delivery(wd, meta, pkg, rows)

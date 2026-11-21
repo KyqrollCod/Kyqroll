@@ -203,6 +203,7 @@ def align_script(words, start, end, script, speech=None):
             ln["emph"] = True
         if spk:
             ln["speaker"] = spk
+            ln["_forced"] = True   # diarization never overrides a hand-set speaker
         if note:
             ln["_note"] = True
         else:
@@ -366,8 +367,9 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
                               f"{{\\pos({cx},{b['y'] + b['h'] // 2})}}{_esc(clip['band_text'])}"))
         if clip.get("hook"):
             hook_lines = wrap(clip["hook"], hk["max_chars_per_line"], 2)
+            hy = (cfg.get("avatar") or {}).get("hook_y", hk["y"]) if layout == "avatar" else hk["y"]
             doc.append(_event(5, 0, duration, "Hook",
-                              f"{{\\pos({cx},{hk['y']})}}" + "\\N".join(_esc(x) for x in hook_lines)))
+                              f"{{\\pos({cx},{hy})}}" + "\\N".join(_esc(x) for x in hook_lines)))
         if layout == "letterbox":
             for lb in cfg.get("name_labels") or []:
                 col = ass_color(lb.get("color", "#FFFFFF"))
@@ -378,6 +380,8 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
         doc.append(_event(5, 0, duration, "Label", f"{{\\pos({lb['x']},{lb['y']})}}{_esc(clip['label'])}"))
 
     bottom = sc["bottom_y"]
+    if layout == "avatar":
+        bottom = (cfg.get("avatar") or {}).get("subs_bottom_y", bottom)
     for ln in lines_out:
         rows = wrap(ln["text"], sc["max_chars_per_line"], sc["max_lines"])
         body = "\\N".join(_esc(r) for r in rows)

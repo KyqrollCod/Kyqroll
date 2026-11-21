@@ -78,7 +78,8 @@ def asr_sync(path, ass_path, model="medium"):
     return (ok / checked if checked else 1.0), bad
 
 
-def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None):
+def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None, opening=0.0):
+    """opening: seconds of channel intro/teaser at the start (its designed fades are not defects)."""
     q, cfg = st["qc"], st[fmt]
     info = media_info(path)
     res = {"file": path, "format": fmt, "checks": [], "pass": True}
@@ -108,7 +109,7 @@ def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None):
     target = st["audio"]["lufs"]
     add("loudness", abs(li - target) <= q["lufs_tolerance"], f"{li:.1f} LUFS（目標 {target}±{q['lufs_tolerance']}）")
     add("true_peak", tp <= -0.9, f"{tp:.1f} dBTP（-1.0以下）")
-    black = [b for b in _parse_intervals(err, "black") if b[1] > q["max_black_sec"]]
+    black = [b for b in _parse_intervals(err, "black") if b[1] > q["max_black_sec"] and b[0] > opening + 0.3]
     add("black_frames", not black, f"{len(black)}箇所 {black[:3]}")
     freeze = [f for f in _parse_intervals(err, "freeze") if f[1] > q["max_freeze_sec"]]
     add("frozen_video", not freeze, f"{len(freeze)}箇所 {freeze[:3]}", hard=False)

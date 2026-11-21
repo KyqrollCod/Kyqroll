@@ -120,12 +120,25 @@ def cmd_render(a):
                           [(f"r:{c['id']}", f"書き出し {c['id']}", 10 + 0.35 * (float(c['end']) - float(c['start'])))
                            for c in _clips(wd, a.only)])
     reports = []
+    pkg = (load_yaml(os.path.join(wd, "clips.yaml")) or {}).get("package") or {}
     for c in _clips(wd, a.only):
+        # Per-video defaults from `package:` (stand-in art, partner name, BGM); a clip may override.
+        for key in ("avatar", "partner_name", "bgm", "avatar_speaker", "partner_speaker"):
+            if key in pkg and key not in c:
+                c[key] = pkg[key]
+        if c.get("format", "short") == "short" and pkg.get("short_layout") and "layout_fixed" not in c:
+            c["layout"] = pkg["short_layout"]
         out = os.path.join(out_dir, f"{c['id']}.mp4")
         prog = current()
         if prog:
             prog.start(f"r:{c['id']}")
         r = render_clip(wd, c, st, gl, out, words)
+        if c.get("format") == "long":
+            local = os.path.join(ROOT, "config", "local.yaml")
+            intro = c.get("intro", pkg.get("intro", (load_yaml(local) or {}).get("long_intro") if os.path.exists(local) else None))
+            if intro or c.get("teaser", True):
+                from .render import add_opening
+                add_opening(out, r, intro, out, st, teaser=c.get("teaser", pkg.get("teaser", True)))
         if prog:
             prog.done(f"r:{c['id']}", f"{r['duration']}秒")
         if c.get("format") == "long" and c.get("thumbnail_text"):
@@ -188,7 +201,8 @@ def cmd_qc(a):
         if prog:
             prog.start(f"q:{c['id']}")
         r = check(path, c.get("format", "short"), st, ass,
-                  os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None))
+                  os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None),
+                  opening=float((reports.get(c["id"]) or {}).get("opening") or 0.0))
         results.append(r)
         ok &= r["pass"]
         bad = [f"{x['name']}: {x['detail']}" for x in r["checks"] if not x["ok"]]
@@ -225,12 +239,26 @@ def cmd_align(a):
         print(f"  {c['id']}: {len(lines)} lines" + "".join(f"\n      - {w}" for w in warn))
         bad |= bool(warn)
     if not getattr(a, "no_speakers", False):
-        from .speakers import label_clips
-        done = [c for c in spec.get("clips", []) if c.get("script") and (not keep or c["id"] in keep)]
+        from .diarize import label_lines
+        from .progress import current
+        # Label every aligned clip (labels must not change with --only) from the stream-wide
+        # diarization index (built once per video, cached in diar.npz).
+        done = [c for c in spec.get("clips", []) if c.get("subs")]
         chat_p = os.path.join(wd, "chat.json")
-        rep = label_clips(source_path(wd), done, load_json(chat_p) if os.path.exists(chat_p) else [])
+        meta = load_json(os.path.join(wd, "meta.json")) if os.path.exists(os.path.join(wd, "meta.json")) else {}
+        src = source_path(wd)
+        dur = float(meta.get("duration") or media_info(src)["duration"])
+        prog = current()
+        rep = label_lines(wd, src, dur, done, load_json(chat_p) if os.path.exists(chat_p) else [],
+                          on_progress=(lambda f: prog.set_frac("align", 0.1 + 0.85 * f)) if prog else None)
         for name, r in rep.items():
-            print(f"  話者 {name}: {r['lines']}行（中央値 {r['f0']}Hz） 例: {' / '.join(r['examples'][:3])}")
+            if name.startswith("_"):
+                continue
+            how = "・".join(f"{k}{v}" for k, v in r["how"].items())
+            print(f"  話者 {name}: {r['lines']}行（{how}） 例: {' / '.join(r['examples'][:3])}")
+        review = rep.get("_review", [])
+        save_json(os.path.join(wd, "speaker_review.json"), review)
+        print(f"  話者の確認候補（自信が低い行）: {len(review)}行 → 動画ページに一覧")
     save_yaml(path, spec)
     return not bad
 
@@ -274,7 +302,9 @@ def cmd_build(a):
             save_yaml(dst, spec)
     clips = _clips(wd, a.only)
     # Rough time estimates (s) only weight the overall bar; the page recalibrates from elapsed time.
-    steps = [("align", "テロップの時刻合わせ・話者判定", 15 + 8 * len(clips))]
+    first_diar = not os.path.exists(os.path.join(wd, "diar.npz"))
+    steps = [("align", "テロップの時刻合わせ・話者判定" + ("（初回は配信全体を解析）" if first_diar else ""),
+              15 + 8 * len(clips) + (300 if first_diar else 0))]
     steps += [(f"r:{c['id']}", f"書き出し {c['id']}", 10 + 0.35 * (float(c['end']) - float(c['start'])))
               for c in clips]
     steps += [(f"q:{c['id']}", f"品質チェック {c['id']}", 20 + 0.08 * (float(c['end']) - float(c['start'])))

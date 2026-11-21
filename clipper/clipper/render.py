@@ -74,6 +74,57 @@ def build_clip_lines(clip, words, gl, st, fmt):
     return auto_lines(words, float(clip["start"]), float(clip["end"]), sc["max_chars_per_line"], gl)
 
 
+def auto_se(clip, lines, zooms, mp, st, min_gap=1.6, limit_per_min=14):
+    """Automatic cues in output time: emph line → pop, zoom → whoosh, keep (visual payoff) →
+    impact, chat read aloud → ding. Spaced out so they punctuate instead of clutter."""
+    from .audiogen import se_path
+    cues = []
+    for z in zooms:
+        cues.append((max(0.0, z["out_start"] - 0.18), "whoosh", 0.55))
+    for k in clip.get("keep") or []:
+        cues.append((mp.to_out_clamped(float(k[0])), "impact", 0.7))
+    for ln in lines:
+        if ln.get("speaker") == "読み上げ":   # just before the reading, never over its first syllables
+            cues.append((max(0.0, ln["start"] - 0.45), "ding", 0.32))
+        elif ln.get("emph"):
+            cues.append((ln["start"], "pop", 0.5))
+    cues.sort()
+    out, last = [], -9.0
+    cap = max(3, int(mp.duration / 60 * limit_per_min))
+    for t, name, vol in cues:
+        if t - last >= min_gap and len(out) < cap:
+            out.append((se_path(name), t, vol))
+            last = t
+    return out
+
+
+def make_badge(label, color, size, st, path, bubble=False):
+    """Round name badge (partner) or speech bubble (chat read aloud), as an RGBA PNG."""
+    from PIL import Image, ImageDraw, ImageFont
+    s = 4
+    S = size * s
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    col = tuple(int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    if bubble:
+        d.rounded_rectangle([6 * s, 30 * s, S - 6 * s, S - 60 * s], radius=40 * s, fill=col + (240,),
+                            outline=(255, 255, 255, 255), width=8 * s)
+        d.polygon([(S * 0.25, S - 64 * s), (S * 0.18, S - 14 * s), (S * 0.42, S - 64 * s)], fill=col + (240,))
+    else:
+        d.ellipse([6 * s, 6 * s, S - 6 * s, S - 6 * s], fill=col + (235,), outline=(255, 255, 255, 255), width=10 * s)
+    font = ImageFont.truetype(os.path.join(fonts_dir(st), st["font_telop_file"]), 10)
+    fs = 10
+    for fs in range(int(S * 0.34), 10, -4):
+        font = ImageFont.truetype(os.path.join(fonts_dir(st), st["font_telop_file"]), fs)
+        if d.textlength(label, font=font) <= S * 0.78:
+            break
+    cy = (S - 30 * s) / 2 if bubble else S / 2
+    d.text((S / 2, cy), label, font=font, fill=(255, 255, 255, 255), anchor="mm",
+           stroke_width=max(2, fs // 12), stroke_fill=(20, 20, 30, 255))
+    im.resize((size, size), Image.LANCZOS).save(path)
+    return path
+
+
 def source_silences(src, start, end, noise="-45dB", min_dur=1.0):
     """(start, duration) of audible silences in [start, end], in source time. Same threshold as
     the qc dead_air check, so what qc would flag is what gets cut."""
@@ -178,6 +229,49 @@ def render_clip(wd, clip, st, gl, out_path, words):
         g.append(_fill("cv2", clip.get("game_rect", sp["game"]), W, H - face_h, sw, sh, "game0"))
         g.append(_zoomed("game0", W, H - face_h, zooms, "game", tuple(clip.get("zoom_focus", (0.5, 0.5)))))
         g.append("[face][game]vstack=inputs=2,setsar=1[comp]")
+    elif layout == "avatar":
+        # Blurred game fills the canvas, the game itself sits in a band near the top, and the
+        # streamer's stand-in art overlaps the lower half, bobbing while she talks.
+        av = cfg["avatar"]
+        g.append("[cv]split=2[cvb][cvg]")
+        g.append(f"[cvb]scale={W}:{H}:force_original_aspect_ratio=increase:flags=bilinear,crop={W}:{H},"
+                 f"boxblur={av['bg_blur']}:2,eq=brightness=-{av['bg_dim']},setsar=1[bgv]")
+        vw, vh = W, int(W * sh / sw) // 2 * 2
+        g.append(f"[cvg]scale={vw}:{vh}:flags=lanczos,setsar=1[gv0]")
+        g.append(_zoomed("gv0", vw, vh, zooms, "gv", tuple(clip.get("zoom_focus", (0.5, 0.5)))))
+        g.append(f"[bgv][gv]overlay=0:{av['game_y']}[comp0]")
+        cur_av = "comp0"
+        art = clip.get("avatar")
+        if art:
+            inputs += ["-loop", "1", "-i", _asset(art, "images")]
+            idx_av = len([x for x in inputs if x == "-i"]) - 1
+            ah = int(av["height"])
+            talk = tree_expr((f"between(t\\,{ln['start']:.3f}\\,{ln['end']:.3f})" for ln in lines
+                              if ln.get("speaker") == clip.get("avatar_speaker", "配信者")), "+") or "0"
+            y0 = H - ah + int(av["bottom_overflow"])
+            bob = float(av.get("talk_bob", 0))
+            yexpr = f"{y0}-{bob}*abs(sin(2*PI*3.2*t))*min(1\\,{talk})" if bob else str(y0)
+            g.append(f"[{idx_av}:v]scale=-1:{ah}:flags=lanczos,format=rgba[avi]")
+            g.append(f"[comp0][avi]overlay=x={av['x']}:y='{yexpr}':eval=frame:shortest=1[comp1]")
+            cur_av = "comp1"
+        # Partner / chat-TTS badges while they speak (left side, clear of the YouTube UI).
+        badges = []
+        for who, label, colkey in ((clip.get("partner_speaker", "相手"), clip.get("partner_name"), "相手"),
+                                   ("読み上げ", "コメント", "読み上げ")):
+            spans = [ln for ln in lines if ln.get("speaker") == who]
+            if not spans or not label:
+                continue
+            png = make_badge(label, cfg["speakers"].get(colkey, "#3EA8FF"), int(av["badge"]["size"]), st,
+                             os.path.join(tmp, f"badge_{colkey}.png"), bubble=(who == "読み上げ"))
+            badges.append((png, spans))
+        for k, (png, spans) in enumerate(badges):
+            inputs += ["-loop", "1", "-i", png]
+            bi = len([x for x in inputs if x == "-i"]) - 1
+            en = tree_expr((f"between(t\\,{ln['start']:.3f}\\,{ln['end']:.3f})" for ln in spans), "+")
+            g.append(f"[{cur_av}][{bi}:v]overlay=x={av['badge']['x']}:y={av['badge']['y']}:"
+                     f"enable='{en}':shortest=1[cb{k}]")
+            cur_av = f"cb{k}"
+        g.append(f"[{cur_av}]null[comp]")
     else:  # letterbox
         band = cfg["band"]
         max_h = cfg["hook"]["y"] - 20 - cfg["video_y"]      # never run into the bottom text area
@@ -196,7 +290,7 @@ def render_clip(wd, clip, st, gl, out_path, words):
 
     # 3) Image overlays (memes, stickers) on output time.
     cur = "comp"
-    idx = 1
+    idx = len([x for x in inputs if x == "-i"])   # next input index (layouts may have added images)
     for k, ov in enumerate(clip.get("overlays") or []):
         inputs += ["-loop", "1", "-i", _asset(ov["file"], "images")]
         o = mp.to_out_clamped(float(ov["at"]))
@@ -212,20 +306,36 @@ def render_clip(wd, clip, st, gl, out_path, words):
     g.append(f"[{cur}]ass=filename={ff_escape(ass_path)}:fontsdir={ff_escape(fonts_dir(st))},"
              f"format=yuv420p[outv]")
 
-    # 5) Sound effects mixed on output time.
-    aud = "ca"
+    # 5) Sound effects mixed on output time: hand-placed ones plus automatic cues.
+    se_items = [(_asset(se["file"], "se"), mp.to_out_clamped(float(se["at"])),
+                 float(se.get("volume", st["audio"]["se_volume"]))) for se in clip.get("se") or []]
+    if clip.get("auto_se", cfg.get("auto_se", False)):
+        se_items += auto_se(clip, lines, zooms, mp, st)
     se_labels = []
-    for k, se in enumerate(clip.get("se") or []):
-        inputs += ["-i", _asset(se["file"], "se")]
-        o = mp.to_out_clamped(float(se["at"]))
-        vol = float(se.get("volume", st["audio"]["se_volume"]))
+    for k, (path, o, vol) in enumerate(se_items):
+        inputs += ["-i", path]
         g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,volume={vol},"
                  f"adelay={int(o * 1000)}:all=1[se{k}]")
         se_labels.append(f"[se{k}]")
         idx += 1
     g.append("[ca]aformat=channel_layouts=stereo[ca2]")
-    if se_labels:
-        g.append(f"[ca2]{''.join(se_labels)}amix=inputs={1 + len(se_labels)}:normalize=0:duration=first[am]")
+    # 6) BGM under everything, ducked by the voice (sidechain) so speech always wins.
+    voice, beds = "ca2", []
+    bgm = clip.get("bgm", cfg.get("bgm"))
+    if bgm and str(bgm).lower() != "none":
+        from .audiogen import bgm_path
+        path = bgm if os.path.isabs(str(bgm)) else bgm_path(str(bgm))
+        inputs += ["-stream_loop", "-1", "-i", path]
+        g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
+                 f"volume={float(clip.get('bgm_db', cfg.get('bgm_db', -22)))}dB,atrim=duration={dur:.3f},"
+                 f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, dur - 1.2):.3f}:d=1.2[bgr]")
+        g.append("[ca2]asplit=2[cav][cak]")
+        g.append("[bgr][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
+        voice, beds = "cav", ["[bgd]"]
+        idx += 1
+    if se_labels or beds:
+        n = 1 + len(se_labels) + len(beds)
+        g.append(f"[{voice}]{''.join(se_labels)}{''.join(beds)}amix=inputs={n}:normalize=0:duration=first[am]")
         aud = "am"
     else:
         aud = "ca2"
@@ -270,16 +380,138 @@ def render_clip(wd, clip, st, gl, out_path, words):
               f"offset={m['target_offset']}:linear=true,")
     else:
         ln = ""   # silent clip: nothing to normalize (qc reports it)
+    part = out_path + ".part.mp4"   # never write over a file a browser may be playing
     run([need("ffmpeg"), "-y", "-hide_banner", "-i", stage1, "-c:v", "copy", "-af", f"{ln}aresample=48000",
-         "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", out_path])
+         "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", part])
+    replace_when_free(part, out_path)
 
     report = {"id": clip.get("id"), "format": fmt, "layout": layout, "out": out_path,
               "duration": round(dur, 2), "segments": len(ranges),
               "removed_sec": round(float(clip["end"]) - float(clip["start"]) - dur, 2),
               "lines": len(lines), "fps": fps}
     report["ass"] = ass_path
+    # Output-time positions of each line (the page links unsure lines to the exact moment) and
+    # of the punchlines (the long-video teaser is cut from them).
+    report["line_times"] = {}
+    for ln in lines:
+        report["line_times"].setdefault(ln["text"].replace("\n", ""), round(ln["start"], 2))
+    report["emph_out"] = [[round(ln["start"], 2), round(ln["end"], 2)] for ln in lines if ln.get("emph")]
     shutil.rmtree(tmp, ignore_errors=True)   # stage1 is uncompressed audio: hundreds of MB
     return report
+
+
+def normalize_loudness(src, dst, st):
+    """Two-pass EBU R128 to the style target; video stream copied."""
+    au, enc = st["audio"], st["encode"]
+    target = f"I={au['lufs']}:TP={au['true_peak']}:LRA={au['lra']}"
+    err = run([need("ffmpeg"), "-hide_banner", "-i", src, "-vn", "-af", f"loudnorm={target}:print_format=json",
+               "-f", "null", "-"])
+    m = json.loads(err[err.rfind("{"):err.rfind("}") + 1])
+    try:
+        ok = math.isfinite(float(m["input_i"])) and float(m["input_i"]) > -70
+    except (TypeError, ValueError):
+        ok = False
+    ln = (f"loudnorm={target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
+          f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true," if ok else "")
+    # linear loudnorm cannot both raise the level and keep true peak: a limiter catches the overs.
+    run([need("ffmpeg"), "-y", "-hide_banner", "-i", src, "-c:v", "copy", "-af",
+         f"{ln}alimiter=limit=0.8:level=false:attack=3:release=60,aresample=48000",
+         "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", dst])
+    return dst
+
+
+def replace_when_free(src, dst, tries=30):
+    """os.replace that waits out Windows file locks (a browser tab or the page server still
+    streaming the previous version of the video)."""
+    import time
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            time.sleep(1.0)
+    raise PermissionError(f"{dst} が開かれたままで上書きできません。ブラウザの動画タブを閉じてから再実行してください")
+
+
+def pick_teaser(report, max_total=8.0, max_each=2.8, count=3):
+    """Up to `count` punchline moments, spread over the video, for a cold open before the intro."""
+    spans = [s for s in report.get("emph_out") or [] if s[1] - s[0] >= 0.6]
+    if not spans:
+        return []
+    dur = report["duration"]
+    picked = []
+    for k in range(count):            # one from each part of the video
+        part = [s for s in spans if k * dur / count <= s[0] < (k + 1) * dur / count]
+        if part:
+            s = max(part, key=lambda x: x[1] - x[0])
+            a = max(0.0, s[0] - 0.25)
+            picked.append([a, min(dur, a + max_each, s[1] + 0.45)])
+    out, total = [], 0.0
+    for a, b in picked:
+        if total + (b - a) > max_total:
+            break
+        out.append([round(a, 3), round(b, 3)])
+        total += b - a
+    return out
+
+
+def add_opening(main_path, report, intro, out_path, st, teaser=True):
+    """Long videos: [teaser of punchlines] + [channel intro] + [main]. The ASS used by qc is shifted
+    by the opening length so the speech/telop check still lines up."""
+    enc = st["encode"]
+    spans = pick_teaser(report) if teaser else []
+    inputs = ["-i", main_path]
+    g, parts = [], []
+    for k, (a, b) in enumerate(spans):
+        g.append(f"[0:v]trim=start={a}:end={b},setpts=PTS-STARTPTS,fps=60,format=yuv420p,setsar=1[tv{k}]")
+        g.append(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,afade=t=in:d=0.05,"
+                 f"afade=t=out:st={max(0.0, b - a - 0.12):.3f}:d=0.12[ta{k}]")
+        parts.append(f"[tv{k}][ta{k}]")
+    opening = sum(b - a for a, b in spans)
+    if intro and os.path.exists(intro):
+        inputs += ["-i", intro]
+        g.append("[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
+                 "fps=60,format=yuv420p,setsar=1[iv]")
+        g.append(f"[1:a]aresample=48000,aformat=channel_layouts=stereo,loudnorm=I={st['audio']['lufs']}:"
+                 f"TP={st['audio']['true_peak']}[ia]")
+        parts.append("[iv][ia]")
+        opening += media_info(intro)["duration"]
+    if not parts:
+        return None
+    g.append("[0:v]fps=60,format=yuv420p,setsar=1[mv]")
+    g.append("[0:a]aformat=channel_layouts=stereo[ma]")
+    parts.append("[mv][ma]")
+    g.append(f"{''.join(parts)}concat=n={len(parts)}:v=1:a=1[v][a]")
+    tmp_out = out_path + ".tmp.mp4"
+    venc = ["-c:v", enc["encoder"]]
+    if enc["encoder"] == "libx264":
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"])]
+    run([need("ffmpeg"), "-y", "-hide_banner", *inputs, "-filter_complex", ";".join(g), "-map", "[v]", "-map", "[a]",
+         *venc, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", tmp_out])
+    # The intro and teaser change the programme loudness: normalize the joined video as a whole.
+    normalize_loudness(tmp_out, out_path + ".norm.mp4", st)
+    os.remove(tmp_out)
+    replace_when_free(out_path + ".norm.mp4", out_path)
+    # Shift every subtitle event by the opening length (qc compares them with what it hears).
+    ass = report["ass"]
+    txt = open(ass, encoding="utf-8-sig").read()
+
+    def sh(m):
+        def ts(x):
+            h, mi, s = x.split(":")
+            return int(h) * 3600 + int(mi) * 60 + float(s)
+
+        def fmt(v):
+            h, rem = divmod(v, 3600)
+            mi, s = divmod(rem, 60)
+            return f"{int(h)}:{int(mi):02d}:{s:05.2f}"
+        return f"Dialogue: {m.group(1)},{fmt(ts(m.group(2)) + opening)},{fmt(ts(m.group(3)) + opening)},"
+    txt = re.sub(r"Dialogue: (\d+),([^,]+),([^,]+),", sh, txt)
+    with open(ass, "w", encoding="utf-8-sig") as fh:
+        fh.write(txt)
+    report.update(opening=round(opening, 2), teaser=spans, duration=round(report["duration"] + opening, 2))
+    report["line_times"] = {k: round(v + opening, 2) for k, v in report.get("line_times", {}).items()}
+    return out_path
 
 
 def load_words(wd):

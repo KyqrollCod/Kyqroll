@@ -47,11 +47,11 @@ short:
     outer_color: "#2A1A0A"
     emph_color: "#FFE600"
     emph_scale: 125
-  speakers:               # 話者ごとの字幕色（align が 女性/男性/読み上げ を自動で付ける。script の @名前: で上書き）
+  speakers:               # 話者ごとの字幕色（align が 配信者/相手/読み上げ を自動で付ける。script の @配信者: などで上書き）
     default: "#FF8A1F"
-    女性: "#FF6FAE"
-    男性: "#3EA8FF"
-    読み上げ: "#6EDB5A"
+    配信者: "#4FD4FF"
+    相手: "#FFA040"
+    読み上げ: "#A6E35A"
   name_labels: []         # [{text: "ざき", x: 540, y: 690, color: "#FF8A1F"}]（letterbox 時に常時表示）
   crop:
     center_x: 0.5         # crop 時の切り抜き中心（0=左端, 1=右端）
@@ -59,6 +59,20 @@ short:
     face: [0.70, 0.05, 0.28, 0.40]   # 顔カメラ（立ち絵）の位置。calibrate で決める
     game: [0.0, 0.0, 1.0, 1.0]
     face_h: 760
+  avatar:                 # layout: avatar（背景にぼかしたゲーム、上にゲーム画面、立ち絵を大きく重ねる）
+    game_y: 330           # ゲーム画面(16:9)の上端
+    height: 1010          # 立ち絵の高さ
+    x: 240                # 立ち絵の左端（右側は画面外にはみ出してよい）
+    bottom_overflow: 70   # 立ち絵の下端を画面外へ出す量
+    talk_bob: 0           # 本人が話している間の上下の弾み(px)。0で静止（オーナー指示 2026-11-21）
+    hook_y: 70            # 上部の大きな一文（hook）の上端
+    subs_bottom_y: 1215   # テロップの下端
+    badge: {x: 36, y: 1290, size: 230}   # 共演者・コメント読み上げのアイコン位置（左側）
+    bg_blur: 26
+    bg_dim: 0.32
+  auto_se: true           # 強調行=pop、ズーム=whoosh、keep=impact、読み上げ=ding を自動で付ける
+  bgm: comical            # comical / tension / none（clips.src.yaml の package.bgm やクリップの bgm で上書き）
+  bgm_db: -24             # BGM の音量（声が出ている間はさらに自動で下がる）
   safe:                   # YouTube ショートのUIに隠れる領域（ここに文字を置かない）
     bottom_px: 300
     right_px: 140
@@ -69,21 +83,24 @@ long:
   min_sec: 180
   background: "#000000"
   subs:
-    font_size: 68
-    bottom_y: 1030
-    max_chars_per_line: 24
+    font_size: 80         # オーナー指示 2026-11-21: 大きく、少し上に
+    bottom_y: 960         # 下端。YouTube のシークバーと操作ボタン（下約80px）に被らない高さ
+    max_chars_per_line: 20
     max_lines: 2
-    outline_inner: 6
-    outline_outer: 12
+    outline_inner: 7
+    outline_outer: 14
     inner_color: "#FFFFFF"
     outer_color: "#2A1A0A"
     emph_color: "#FFE600"
     emph_scale: 125
   speakers:
     default: "#FF8A1F"
-    女性: "#FF6FAE"
-    男性: "#3EA8FF"
-    読み上げ: "#6EDB5A"
+    配信者: "#4FD4FF"
+    相手: "#FFA040"
+    読み上げ: "#A6E35A"
+  auto_se: true
+  bgm: comical
+  bgm_db: -27             # 横型は控えめに
   label:                  # 左上の常時ラベル（ゲーム名・局面など）
     x: 40
     y: 36
@@ -132,5 +149,5 @@ qc:
   max_black_sec: 0.4
   max_freeze_sec: 2.5
   max_line_chars_short: 11
-  max_line_chars_long: 24
+  max_line_chars_long: 20
   contact_sheet_every_sec: 3
