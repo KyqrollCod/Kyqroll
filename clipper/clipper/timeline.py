@@ -114,6 +114,27 @@ def cut_silences(ranges, silences, keep=(), margin=0.2, min_len=1.0, min_segment
     return out or ranges
 
 
+def drop_ranges(ranges, drops, min_segment=0.35):
+    """Remove clip["drop"] spans (a line that must not air, off-topic chatter) from kept ranges.
+    Works with silence trimming and with explicit segments alike."""
+    out = []
+    for ra, rb in ranges:
+        pieces = [[ra, rb]]
+        for da, db in sorted((float(a), float(b)) for a, b in drops):
+            nxt = []
+            for pa, pb in pieces:
+                if db <= pa or da >= pb:
+                    nxt.append([pa, pb])
+                    continue
+                if da > pa:
+                    nxt.append([pa, da])
+                if db < pb:
+                    nxt.append([db, pb])
+            pieces = nxt
+        out += [p for p in pieces if p[1] - p[0] >= min_segment]
+    return out
+
+
 class Mapper:
     """Maps source time to output time across the kept ranges."""
 

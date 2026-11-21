@@ -15,6 +15,18 @@ def _pcm16k(src):
     return np.frombuffer(p.stdout, dtype=np.float32)
 
 
+def speech_spans(src, start, end):
+    """Where someone is actually talking in [start, end] (source seconds), from Silero VAD on the
+    audio itself. Telop starts are snapped to these: Whisper's word starts run early."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+    p = subprocess.run([need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}",
+                        "-t", f"{end - start:.3f}", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
+                       stdout=subprocess.PIPE, check=True)
+    audio = np.frombuffer(p.stdout, dtype=np.float32)
+    opts = VadOptions(threshold=0.5, min_speech_duration_ms=120, min_silence_duration_ms=120, speech_pad_ms=20)
+    return [(start + s["start"] / 16000, start + s["end"] / 16000) for s in get_speech_timestamps(audio, opts)]
+
+
 def _cuda_dll_paths():
     """On Windows, pip's nvidia-cublas/cudnn wheels put DLLs where ctranslate2 can't see them."""
     if os.name != "nt":

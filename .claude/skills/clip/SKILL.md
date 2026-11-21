@@ -41,6 +41,28 @@ python -m clipper qc work/<id> --asr large-v3               # → out/qc.json, o
 
 Set `$env:CLIPPER_PRESET="veryfast"` for drafts (a 7-min long renders in ~2 min).
 
+**One command per iteration.** Write `clips.src.yaml` and run
+`python -m clipper build <folder> [--only c01s]`. It copies it to clips.yaml, aligns, labels
+speakers, runs a preflight (unmatched lines, row length), and stops there on any problem
+before the render. Only then does it render and run `qc --asr large-v3`. Fix what it reports and
+run it again; don't chain the steps by hand.
+
+**Where files live.** On the user's PC, `config/local.yaml` (not in git) sets `work_root`
+(E:/claude/切り抜き制作). fetch makes one folder per video, `<配信日>_<配信者>_<id>`, which holds the
+source, transcript, chat, clips.src.yaml and out/ (MP4, thumbnails, sheets, delivery.md).
+Later edits happen in the same folder.
+
+**Speakers.** `align` labels every telop line 読み上げ / 男性 / 女性 and colors it from
+`style.yaml` speakers. 読み上げ means the line is a chat message (the TTS bot reads chat
+verbatim). Otherwise pitch decides when clear (<165 Hz / >230 Hz), and the voice embedding
+(clipper/models/wespeaker_en_voxceleb_resnet34.onnx, from the sherpa-onnx
+speaker-recongition-models release) decides the rest. Embeddings alone could not separate the
+voices under game audio. Check that the printed examples read like a dialogue. Force a line with
+`@男性:テキスト` in the script.
+
+**Timing.** Telops start at the speech onset found by Silero VAD on the audio, never during
+the silence before it, because Whisper's word starts run early.
+
 **Transcribe.** Batched large-v3 on a GPU: 3 h of audio in ~2 min (RTX 4070 Ti). Pass `--prompt`
 as a comma list of the streamer's name, the game and its terms. Never a sentence: Whisper
 echoes a sentence prompt back as speech. Repetition loops and prompt echoes are dropped

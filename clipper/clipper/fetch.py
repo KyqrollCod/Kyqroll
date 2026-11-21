@@ -49,11 +49,34 @@ def twitch_chat_gql(video_id, duration, step=600):
     return sorted(msgs, key=lambda m: m["t"])
 
 
-def fetch(url, work_root, cookies_from_browser=None, max_height=1080):
-    import yt_dlp  # imported here so render-only use needs no yt-dlp
+def _safe(name):
+    return re.sub(r'[\\/:*?"<>|\s]+', "_", str(name or "")).strip("_")[:40]
 
+
+def video_folder(work_root, key, info=None):
+    """One folder per video, named for people: <配信日>_<配信者>_<id> (e.g. 20261120_ろあろああ_tw_2934905292).
+    An existing folder for the same id is reused, whatever its prefix."""
+    if os.path.isdir(work_root):
+        for n in sorted(os.listdir(work_root)):
+            if (n == key or n.endswith("_" + key)) and os.path.isdir(os.path.join(work_root, n)):
+                return os.path.join(work_root, n)
+    info = info or {}
+    parts = [info.get("upload_date"), _safe(info.get("uploader") or info.get("channel")), key]
+    return os.path.join(work_root, "_".join(p for p in parts if p))
+
+
+def fetch(url, work_root=None, cookies_from_browser=None, max_height=1080):
+    import yt_dlp  # imported here so render-only use needs no yt-dlp
+    from .common import default_work_root
+
+    work_root = work_root or default_work_root()
     key = video_key(url)
-    wd = os.path.join(work_root, key)
+    probe = {"quiet": True, "skip_download": True, "noplaylist": True}
+    if cookies_from_browser:
+        probe["cookiesfrombrowser"] = (cookies_from_browser,)
+    with yt_dlp.YoutubeDL(probe) as ydl:
+        head = ydl.extract_info(url, download=False)
+    wd = video_folder(work_root, key, head)
     os.makedirs(wd, exist_ok=True)
     opts = {
         "outtmpl": os.path.join(wd, "source.%(ext)s"),

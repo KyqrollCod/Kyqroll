@@ -22,7 +22,11 @@ cd clipper
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-ffmpeg・Python・依存パッケージを入れます。NVIDIA GPU がある場合は CUDA 版の文字起こしが自動で使われます
+ffmpeg・Python・依存パッケージを入れます。
+話者の色分けには `pip install sherpa-onnx` と、モデル
+`https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34.onnx`
+を `clipper/models/` に置くことが必要です（無ければ色分けせずに進みます）。
+保存先は `config/local.yaml` の `work_root: E:/claude/切り抜き制作` で決まり、動画ごとにフォルダができます。NVIDIA GPU がある場合は CUDA 版の文字起こしが自動で使われます
 （`style.yaml` の `encode.encoder` を `h264_nvenc` にすると書き出しも GPU）。
 
 ## 使い方

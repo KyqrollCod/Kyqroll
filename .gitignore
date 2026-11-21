@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 clipper/work/
 clipper/out/
+clipper/config/local.yaml
+clipper/models/
