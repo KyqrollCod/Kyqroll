@@ -8,6 +8,9 @@
 - 2026-11-20 owner: never ask approval for listing/publishing/reply flows (incl. the final publish button)
   in manual or scheduled runs; keep approvals to spec §4 要判断 only. Grow the product count. Never move buyers off Coconala. No changes outside the request.
 
+## Language (owner, 2026-11-21)
+- Reports to the user are always in Japanese. Code, comments, commits and docs may stay in English.
+
 ## Git workflow preference
 - The user doesn't handle git. After pushing learning or skill changes, open the PR, mark it ready
   and merge it yourself, then tell the user it's done.
