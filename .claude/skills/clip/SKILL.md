@@ -93,6 +93,29 @@ High pitch alone is not trusted, because men scream. Lines under 60% confidence 
 speaker_review.json and are listed on the video page with a jump link. Report them to the owner.
 A stereo or bandwidth "call vs mic" cue was measured and did not separate the voices.
 
+**Analysis v3 (owner, 2026-11-22): several methods combined, on voice-only audio.**
+This needs torch cu124, demucs, transformers, pyworld, pykakasi, sherpa-onnx. Import torch before
+faster-whisper in one process (cli.main does), or the two cuDNN builds crash.
+- Voice-only stems: Demucs htdemucs per clip window, cached in <video>/cache/.
+- Timing (align_ctc.combine_timing) uses three estimates per line:
+  - O: the original estimate on the mixed audio
+  - W: Whisper large-v3 on the stem (cache/vwords_*)
+  - C: torchaudio MMS forced alignment of the romanized line, with `*` absorbing other speech
+  The base is O. It moves later only when W (or C − 0.25 s) shows the line starts clearly later,
+  and it never moves past the next line's original start. That last guard stops a match on a
+  later repeat from cascading. Then it is snapped to the stem's speech onset.
+  - Verified against W: O was 2–3 s early on some lines, and C runs 0.2–1 s late.
+  - Lines still showing > 0.7 s before any speech go to the "タイミングの確認候補" list on the video page.
+- Speakers (voicevote.py) are decided in this order:
+  1. two timbre classifiers, both Apache-2.0: alefiury LibriSpeech and prithivMLmods Common Voice.
+     When both agree (>85%), that decides, because pitch fails on screams.
+  2. otherwise a weighted vote: classifier A 1.0, voiceprint 0.8, classifier B 0.5, pitch (WORLD Harvest) 0.6
+  The voiceprint references come only from lines where both classifiers agree.
+  `package.speaker_gender` maps the result to roles. Disagreements and low confidence go to speaker_review.json.
+- qc sync compares the telop and what was heard by reading (pykakasi, before stripping punctuation)
+  and also as written, taking the better. Repeats collapse, and the window is ±0.6 s.
+- Loudness: encode → measure I/TP → correct the gain or the limiter → repeat (≤3), with a 4× oversampled limiter.
+
 **Old notes on speakers (superseded):** `align` labels every telop line 読み上げ / 男性 / 女性 and colors it from
 `style.yaml` speakers. 読み上げ means the line is a chat message (the TTS bot reads chat
 verbatim). Otherwise pitch decides when clear (<165 Hz / >230 Hz), and the voice embedding

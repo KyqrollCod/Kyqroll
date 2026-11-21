@@ -229,16 +229,40 @@ def cmd_align(a):
     words = load_words(wd)
     keep = set(a.only.split(",")) if a.only else None
     bad = False
+    src = source_path(wd)
+    ml = _ml_available() and not getattr(a, "no_ml", False)
+    timing = []
     for c in spec.get("clips", []):
         if not c.get("script") or (keep and c["id"] not in keep):
             continue
         s0, s1 = float(c["start"]), float(c["end"])
-        speech = speech_spans(c.get("source") or source_path(wd), s0, s1)
+        speech = speech_spans(c.get("source") or src, s0, s1)
         lines, warn = align_script(words, s0, s1, c["script"], speech)
         c["subs"] = lines
+        if ml:   # timing from three estimates on the voice-only stem (see align_ctc.combine_timing)
+            from .align_ctc import combine_timing, ctc_starts
+            from .voiceprep import speech_on, vocal_words, vocals
+            v = vocals(wd, c.get("source") or src, s0, s1)
+            vw = vocal_words(wd, v, s0, s1)
+            lines_w, _ = align_script(vw, s0, s1, c["script"], None)
+            est_w = [(float(x["start"]), float(x["end"])) if x.get("_m") else None for x in lines_w]
+            est_c = ctc_starts(lines, v, s0, s0, s1)
+            timing += [dict(t, clip=c["id"]) for t in combine_timing(lines, est_w, est_c, speech_on(v, s0), s0, s1)]
+        for ln in lines:
+            ln.pop("_m", None)
         print(f"  {c['id']}: {len(lines)} lines" + "".join(f"\n      - {w}" for w in warn))
         bad |= bool(warn)
-    if not getattr(a, "no_speakers", False):
+    if timing:
+        save_json(os.path.join(wd, "timing_report.json"), timing)
+        by = {}
+        for t in timing:
+            by[t["src"]] = by.get(t["src"], 0) + 1
+        later = [t for t in timing if t["after"] - t["before"] > 0.3]
+        print(f"  時刻合わせ: 声だけWhisper {by.get('W', 0)}行・強制アライメント {by.get('C', 0)}行・従来 {by.get('O', 0)}行"
+              f" ／ 早すぎた行を {len(later)}行 遅らせて修正")
+    if not getattr(a, "no_speakers", False) and ml and (spec.get("package") or {}).get("speaker_gender"):
+        _label_by_votes(wd, spec, src)
+    elif not getattr(a, "no_speakers", False):
         from .diarize import label_lines
         from .progress import current
         # Label every aligned clip (labels must not change with --only) from the stream-wide
@@ -261,6 +285,58 @@ def cmd_align(a):
         print(f"  話者の確認候補（自信が低い行）: {len(review)}行 → 動画ページに一覧")
     save_yaml(path, spec)
     return not bad
+
+
+def _ml_available():
+    try:
+        import torch  # noqa: F401
+        import demucs  # noqa: F401
+        import transformers  # noqa: F401
+        import pyworld  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _label_by_votes(wd, spec, src):
+    """Speakers from several independent methods on voice-only audio (voicevote.py)."""
+    from .diarize import _embed, _extractor, _norm, is_chat_line
+    from .subs import is_note
+    from .voicevote import label
+    from .voiceprep import vocals
+    pkg = spec.get("package") or {}
+    chat_p = os.path.join(wd, "chat.json")
+    chat = load_json(chat_p) if os.path.exists(chat_p) else []
+    chat_norm = [_norm(m.get("text", "")) for m in chat if len(_norm(m.get("text", ""))) >= 4]
+    ex = _extractor()
+    lines, segs = [], []
+    for c in spec.get("clips", []):
+        if not c.get("subs"):
+            continue
+        s0, s1 = float(c["start"]), float(c["end"])
+        v = vocals(wd, c.get("source") or src, s0, s1)
+        for ln in c["subs"]:
+            if is_note(ln["text"]):
+                continue
+            a, b = float(ln["start"]), float(ln["end"])
+            if b - a < 0.6:
+                m = (a + b) / 2
+                a, b = m - 0.3, m + 0.3
+            lines.append(ln)
+            segs.append(v[max(0, int((a - s0) * 16000)):max(0, int((b - s0) * 16000))])
+    det = label(lines, segs, lambda x: _embed(ex, x), lambda t: is_chat_line(t, chat_norm), pkg["speaker_gender"])
+    review = [{"clip": next(c["id"] for c in spec["clips"] if ln in (c.get("subs") or [])),
+               "at": ln["start"], "text": ln["text"].replace("\n", ""), "speaker": ln["speaker"],
+               "conf": ln.get("speaker_conf", 0)}
+              for ln, d in zip(lines, det) if ln.get("speaker_conf", 1) < 0.6 or d.get("clash")]
+    save_json(os.path.join(wd, "speaker_review.json"), review)
+    save_json(os.path.join(wd, "speaker_votes.json"),
+              [{k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items() if k != "emb"} for d in det])
+    counts = {}
+    for ln in lines:
+        counts[ln["speaker"]] = counts.get(ln["speaker"], 0) + 1
+    print("  話者（複数手法の多数決）: " + "、".join(f"{k} {v}行" for k, v in counts.items())
+          + f" ／ 確認候補 {len(review)}行（手法が割れた行・自信が低い行）")
 
 
 def preflight(wd, only=None):
@@ -375,6 +451,12 @@ def cmd_run(a):
 
 
 def main(argv=None):
+    # GPU libraries: torch must load its cuDNN before ctranslate2 (faster-whisper) does, or the two
+    # cuDNN builds clash in one process ("Could not load symbol cudnnGetLibConfig", hard crash).
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        pass
     # Japanese messages must not crash a cp932/cp1252 console (Windows, piped output).
     for stream in (sys.stdout, sys.stderr):
         try:

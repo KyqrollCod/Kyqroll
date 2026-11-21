@@ -364,25 +364,9 @@ def render_clip(wd, clip, st, gl, out_path, words):
     if prog:
         prog.stop_watch()
 
-    # 6) Two-pass loudness normalization (EBU R128), video stream copied.
-    au = st["audio"]
-    target = f"I={au['lufs']}:TP={au['true_peak']}:LRA={au['lra']}"
-    err = run([need("ffmpeg"), "-hide_banner", "-i", stage1, "-vn", "-af",
-               f"loudnorm={target}:print_format=json", "-f", "null", "-"])
-    m = json.loads(err[err.rfind("{"):err.rfind("}") + 1])
-    try:
-        measured = float(m["input_i"])
-    except (TypeError, ValueError):
-        measured = float("-inf")
-    if math.isfinite(measured) and measured > -70:
-        ln = (f"loudnorm={target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
-              f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
-              f"offset={m['target_offset']}:linear=true,")
-    else:
-        ln = ""   # silent clip: nothing to normalize (qc reports it)
+    # 6) Two-pass loudness normalization (EBU R128) + true-peak limiter, video stream copied.
     part = out_path + ".part.mp4"   # never write over a file a browser may be playing
-    run([need("ffmpeg"), "-y", "-hide_banner", "-i", stage1, "-c:v", "copy", "-af", f"{ln}aresample=48000",
-         "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", part])
+    normalize_loudness(stage1, part, st)
     replace_when_free(part, out_path)
 
     report = {"id": clip.get("id"), "format": fmt, "layout": layout, "out": out_path,
@@ -413,11 +397,34 @@ def normalize_loudness(src, dst, st):
         ok = False
     ln = (f"loudnorm={target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
           f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true," if ok else "")
-    # linear loudnorm cannot both raise the level and keep true peak: a limiter catches the overs.
-    run([need("ffmpeg"), "-y", "-hide_banner", "-i", src, "-c:v", "copy", "-af",
-         f"{ln}alimiter=limit=0.7:level=false:attack=3:release=60,aresample=48000",
-         "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", dst])
+    # A limiter that keeps the true peak lowers the loudness, and AAC raises peaks again. One
+    # setting cannot satisfy both, so: encode, measure the result, correct the gain, repeat.
+    lim = 10 ** ((au["true_peak"] - 0.5) / 20)
+    gain, target = 0.0, float(au["lufs"])
+    for _ in range(3):
+        run([need("ffmpeg"), "-y", "-hide_banner", "-i", src, "-c:v", "copy", "-af",
+             # limit at 4x the sample rate: catches inter-sample peaks that AAC would turn into overs
+             f"{ln}volume={gain:.2f}dB,aresample=192000,alimiter=limit={lim:.3f}:level=false:attack=2:release=60,"
+             f"aresample=48000", "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", dst])
+        i_lufs, tp = measure_loudness(dst)
+        if i_lufs is None or (abs(i_lufs - target) <= 0.5 and tp <= -1.1):
+            break
+        if tp > -1.1:
+            lim *= 10 ** ((-1.2 - tp) / 20)          # peaks over: limit harder
+        gain += max(-3.0, min(3.0, target - i_lufs))  # loudness off: correct the gain
     return dst
+
+
+def measure_loudness(path):
+    """(integrated LUFS, true peak dBTP) of a file's audio, as qc measures it."""
+    err = run([need("ffmpeg"), "-hide_banner", "-nostats", "-i", path, "-vn", "-af", "ebur128=peak=true",
+               "-f", "null", "-"])
+    i = re.findall(r"I:\s+(-?[\d.]+) LUFS", err)
+    tp = re.findall(r"Peak:\s+(-?[\d.]+|-inf) dBFS", err)
+    try:
+        return float(i[-1]), float(tp[-1])
+    except (IndexError, ValueError):
+        return None, None
 
 
 def replace_when_free(src, dst, tries=30):

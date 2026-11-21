@@ -29,19 +29,38 @@ def _ts(x):
 _KAKASI = None
 
 
-def _norm(t):
-    """Compare by sound, not spelling: punctuation dropped, kanji read as hiragana and katakana
-    folded to hiragana (ASR writes 「お前」「ヤバイ」 where the telop says 「おまえ」「やばい」)."""
+_REPEAT = re.compile(r"(.{2,6}?)\1+")
+
+
+def _norm(t, read=True):
+    """Compare by sound, not spelling: punctuation dropped, kanji read as hiragana (read=True)
+    and katakana folded to hiragana (ASR writes 「お前」「ヤバイ」 for the telop's 「おまえ」「やばい」).
+    Immediate repeats collapse to one (「やばい」×4 vs ×3 heard is not a timing error)."""
     global _KAKASI
-    try:   # read kanji BEFORE dropping punctuation: 「お前、食べる」 joined becomes おぜんしょく…
-        if _KAKASI is None:
-            import pykakasi
-            _KAKASI = pykakasi.kakasi()
-        t = "".join(x["hira"] for x in _KAKASI.convert(t))
-    except ImportError:
-        pass
+    if read:
+        try:   # read kanji BEFORE dropping punctuation: 「お前、食べる」 joined becomes おぜんしょく…
+            if _KAKASI is None:
+                import pykakasi
+                _KAKASI = pykakasi.kakasi()
+            t = "".join(x["hira"] for x in _KAKASI.convert(t))
+        except ImportError:
+            pass
     t = re.sub(r"[\s、。！？!?…「」『』（）()・,.~〜ー]", "", t)
-    return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in t)
+    t = "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in t)
+    return _REPEAT.sub(r"\1", t)
+
+
+def _cover(text, heard):
+    """Share of the telop's sounds found in what was heard; the reading converter can misread
+    run-together ASR text, so the better of 'read' and 'as written' counts."""
+    import difflib
+    best = 0.0
+    for read in (True, False):
+        t, h = _norm(text, read), _norm(heard, read)
+        if t:
+            sm = difflib.SequenceMatcher(None, t, h)
+            best = max(best, sum(x.size for x in sm.get_matching_blocks()) / len(t))
+    return best
 
 
 def asr_sync(path, ass_path, model="medium"):
@@ -75,13 +94,11 @@ def asr_sync(path, ass_path, model="medium"):
             events.append((_ts(f[1]), _ts(f[2]), body.strip()))
     ok, bad, checked = 0, [], 0
     for a, b, text in events:
-        heard = "".join(w.word for w in words if a - 0.4 <= (w.start + w.end) / 2 <= b + 0.4)
-        t, h = _norm(text), _norm(heard)
-        if not t or is_note(text):
+        heard = "".join(w.word for w in words if a - 0.6 <= (w.start + w.end) / 2 <= b + 0.6)
+        if not _norm(text) or is_note(text):
             continue  # （…） is a translation of game/English audio, not a transcript of speech
         checked += 1
-        sm = difflib.SequenceMatcher(None, t, h)
-        cover = sum(x.size for x in sm.get_matching_blocks()) / len(t)
+        cover = _cover(text, heard)
         if cover >= 0.6:
             ok += 1
         else:

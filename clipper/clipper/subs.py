@@ -217,6 +217,7 @@ def align_script(words, start, end, script, speech=None):
                     i0 = None
             if i0 is not None:
                 ln["start"], ln["end"] = times[i0][0], times[i1][1]
+                ln["_m"] = True          # matched in the transcript (not filled in by neighbours)
                 cur = i1 + 1
             else:
                 warn.append(f"未一致（{hit}/{len(key)}文字）: {text}")
@@ -250,16 +251,22 @@ def align_script(words, start, end, script, speech=None):
                 out[i - 1]["end"] = max(out[i - 1]["start"] + 0.1, ln["start"])
         ln.pop("_note", None)
         ln["start"] = max(start, ln["start"])
-    # Same display rules as auto_lines: minimum time, hold through short gaps.
+    display_rules(out, start, end)
+    return out, warn
+
+
+def display_rules(out, start, end):
+    """Same display rules as auto_lines: hold 0.25 s after the voice, minimum on-screen time
+    (never over the next line), hold through short gaps. Starts are never moved earlier."""
     for i, ln in enumerate(out):
         nxt = out[i + 1]["start"] if i + 1 < len(out) else end
         ln["end"] = min(nxt, ln["end"] + 0.25)
-        if ln["end"] - ln["start"] < 0.7:   # minimum on-screen time, never over the next line
+        if ln["end"] - ln["start"] < 0.7:
             ln["end"] = max(ln["end"], min(nxt, ln["start"] + 0.7))
         if nxt - ln["end"] < 0.5:
             ln["end"] = max(ln["end"], nxt)
-        ln["start"], ln["end"] = round(ln["start"], 2), round(min(end, ln["end"]), 2)
-    return out, warn
+        ln["start"], ln["end"] = round(max(start, ln["start"]), 2), round(min(end, ln["end"]), 2)
+    return out
 
 
 HIRA = re.compile(r"[ぁ-ゖ]")

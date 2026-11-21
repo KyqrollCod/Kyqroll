@@ -213,6 +213,26 @@ def write_video_page(wd):
                            f"</summary><table style='width:100%;margin-top:8px;font-size:13px'>"
                            f"<tr style='color:var(--sub)'><td>クリップ</td><td>位置</td><td>テロップ</td><td>判定</td>"
                            f"<td>自信</td></tr>{''.join(items)}</table></details>")
+    # Lines whose timing estimates disagree by more than 2 s (W / C / original).
+    tr_p = os.path.join(wd, "timing_report.json")
+    if os.path.exists(tr_p):
+        rj = os.path.join(wd, "out", "render.json")
+        times = {r["id"]: r.get("line_times", {}) for r in (load_json(rj) if os.path.exists(rj) else [])}
+        items = []
+        for r in load_json(tr_p):
+            if not r.get("early"):
+                continue
+            t = times.get(r["clip"], {}).get(r["text"])
+            link = (f"<a href='out/{_u(r['clip'])}.mp4#t={max(0, t - 1.0):.1f}' target='_blank'>▶ {_dur(t)}</a>"
+                    if t is not None else "")
+            items.append(f"<tr><td>{_e(r['clip'])}</td><td>{link}</td><td>{_e(r['text'])}</td>"
+                         f"<td>{r['early']:.1f}秒</td></tr>")
+        if items:
+            review_html += (f"<details class='card' style='padding:10px 14px;margin-bottom:18px'><summary>"
+                            f"タイミングの確認候補 {len(items)}行（声が聞こえる前にテロップが出ている可能性。早い・遅いを教えてください）"
+                            f"</summary><table style='width:100%;margin-top:8px;font-size:13px'>"
+                            f"<tr style='color:var(--sub)'><td>クリップ</td><td>位置</td><td>テロップ</td><td>声より早い</td></tr>"
+                            f"{''.join(items)}</table></details>")
     passed = sum(1 for r in rows if r["qc"] and r["qc"].get("pass"))
     info = "".join(f"<span>{k} <b>{_e(v)}</b></span>" for k, v in (
         ("配信者", pkg.get("streamer") or meta.get("uploader")), ("コラボ", pkg.get("collab")),

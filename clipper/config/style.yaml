@@ -117,7 +117,7 @@ timeline:                 # 無言の間を詰める
 
 audio:
   lufs: -14
-  true_peak: -1.5
+  true_peak: -2.0         # AAC でわずかに上がる分の余裕を見て -2.0（qc の基準は -1.0 以下）
   lra: 11
   se_volume: 0.8
 
