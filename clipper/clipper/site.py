@@ -116,7 +116,8 @@ def clip_rows(wd):
                 dur = media_info(mp4)["duration"]
             except Exception:
                 dur = None
-        tags = pkg.get("hashtags_short" if fmt == "short" else "hashtags_long", "")
+        # A clip may override the package tags (a stream with two games: tag only the clip's game).
+        tags = c.get("hashtags") or pkg.get("hashtags_short" if fmt == "short" else "hashtags_long", "")
         rows.append({
             "id": cid, "format": fmt, "title": c.get("title") or "", "desc": c.get("description") or "",
             "credit": credit(pkg) if pkg else "", "tags": tags, "dur": dur, "qc": qc.get(cid),

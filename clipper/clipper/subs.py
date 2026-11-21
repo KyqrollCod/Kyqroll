@@ -395,8 +395,20 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
         fill = cfg["speakers"].get(ln.get("speaker") or "default", cfg["speakers"].get("default"))
         scale = sc["emph_scale"] if ln.get("emph") else 100
         fill = sc["emph_color"] if ln.get("emph") and not ln.get("speaker") else fill
+        x = cx
+        if fmt == "short" and cfg.get("safe"):
+            # Keep the caption clear of the Shorts like/comment column on the right: a row that
+            # would cross it moves left first, and only shrinks if it is wider than the free span.
+            right = W - cfg["safe"]["right_px"]
+            left = cfg["safe"].get("left_px", 40)
+            w = max(dw(r) for r in rows) * sc["font_size"] * scale / 100
+            if w > (right - left):
+                scale = int(scale * (right - left) / w)
+                w = right - left
+            if cx + w / 2 > right:
+                x = int(right - w / 2)
         pop = f"\\fscx{int(scale * 0.82)}\\fscy{int(scale * 0.82)}\\t(0,90,\\fscx{scale}\\fscy{scale})"
-        pos = f"\\an2\\pos({cx},{bottom})"
+        pos = f"\\an2\\pos({x},{bottom})"
         doc.append(_event(1, ln["start"], ln["end"], "SubOuter", f"{{{pos}{pop}}}{body}"))
         doc.append(_event(2, ln["start"], ln["end"], "SubInner",
                           f"{{{pos}{pop}\\1c{ass_color(fill)}}}{body}"))
