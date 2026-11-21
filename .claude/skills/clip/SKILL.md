@@ -63,7 +63,37 @@ speaker names; each clip has `title` and `description`). Do not edit delivery.md
 owner watches background runs through these pages, so always start long runs via build, render
 or qc and point them to http://localhost:8765/.
 
-**Speakers.** `align` labels every telop line 読み上げ / 男性 / 女性 and colors it from
+**Avatar layout, BGM, SE, opening (owner, 2026-11-21).**
+- Shorts use `layout: avatar` when `package.avatar` is set (clips.src.yaml). The layout has:
+  - a blurred game background with the game band near the top and the hook above it
+  - the stand-in art, cut out with rembg isnet-anime plus alpha matting, large at the lower right
+    and still (the owner asked for no bob)
+  - partner and comment badges on the left while those voices speak
+  - big telops above the art
+  Art lives in E:/claude/切り抜き制作/_素材/<streamer>/ and stays out of git.
+- BGM and SE are original and synthesized in code (`audiogen.py`, from the stream-intro synth), so
+  there are no licenses to check. BGM is `comical` or `tension`, looped and ducked under the voice
+  by a sidechain. Auto SE: emph → pop, zoom → whoosh, keep → impact, chat TTS → a ding just
+  before it.
+- Long videos open with up to 3 punchlines (≤8 s), then the channel intro (`long_intro` in
+  config/local.yaml), then the main video. The joined video is re-normalized and limited. The qc
+  ASS is shifted by the opening, and qc ignores black frames inside the opening.
+- Long telops are 80 px, with the bottom at 960 so they clear the YouTube seek bar, and 20 chars per row.
+
+**Speakers.** Roles are 配信者 (light blue), 相手 (orange) and 読み上げ (yellow-green).
+`diarize.py` embeds speech windows over the whole stream once (cached in diar.npz) and builds
+two reference voices from windows with an unmistakably low or high pitch. The streamer is the
+voice of the stream's first seconds. Each line is decided in this order:
+1. `@名前:` set by hand
+2. the line is a chat message → 読み上げ
+3. its own pitch is under 155 Hz → the low voice
+4. its own embedding against the references
+5. turn-taking fills an unsure line between two sure lines of the same speaker
+High pitch alone is not trusted, because men scream. Lines under 60% confidence go to
+speaker_review.json and are listed on the video page with a jump link. Report them to the owner.
+A stereo or bandwidth "call vs mic" cue was measured and did not separate the voices.
+
+**Old notes on speakers (superseded):** `align` labels every telop line 読み上げ / 男性 / 女性 and colors it from
 `style.yaml` speakers. 読み上げ means the line is a chat message (the TTS bot reads chat
 verbatim). Otherwise pitch decides when clear (<165 Hz / >230 Hz), and the voice embedding
 (clipper/models/wespeaker_en_voxceleb_resnet34.onnx, from the sherpa-onnx

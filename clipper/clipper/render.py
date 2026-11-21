@@ -415,7 +415,7 @@ def normalize_loudness(src, dst, st):
           f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true," if ok else "")
     # linear loudnorm cannot both raise the level and keep true peak: a limiter catches the overs.
     run([need("ffmpeg"), "-y", "-hide_banner", "-i", src, "-c:v", "copy", "-af",
-         f"{ln}alimiter=limit=0.8:level=false:attack=3:release=60,aresample=48000",
+         f"{ln}alimiter=limit=0.7:level=false:attack=3:release=60,aresample=48000",
          "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", dst])
     return dst
 

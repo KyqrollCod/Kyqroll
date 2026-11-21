@@ -26,9 +26,20 @@ def _ts(x):
     return int(h) * 3600 + int(m) * 60 + float(s)
 
 
+_KAKASI = None
+
+
 def _norm(t):
-    """Compare by sound, not spelling: punctuation dropped, katakana folded to hiragana
-    (ASR writes 「ヤバイ」 where the telop says 「やばい」)."""
+    """Compare by sound, not spelling: punctuation dropped, kanji read as hiragana and katakana
+    folded to hiragana (ASR writes 「お前」「ヤバイ」 where the telop says 「おまえ」「やばい」)."""
+    global _KAKASI
+    try:   # read kanji BEFORE dropping punctuation: 「お前、食べる」 joined becomes おぜんしょく…
+        if _KAKASI is None:
+            import pykakasi
+            _KAKASI = pykakasi.kakasi()
+        t = "".join(x["hira"] for x in _KAKASI.convert(t))
+    except ImportError:
+        pass
     t = re.sub(r"[\s、。！？!?…「」『』（）()・,.~〜ー]", "", t)
     return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in t)
 
@@ -157,6 +168,7 @@ def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None, opening
     if asr_model and ass_path and os.path.exists(ass_path):
         score, bad = asr_sync(path, ass_path, asr_model)
         add("subtitle_sync", score >= 0.9, f"{score:.0%} の字幕が音声と一致 {bad[:3]}")
+        res["sync_bad"] = bad   # every mismatch, for review
 
     if sheet_path:
         every = q["contact_sheet_every_sec"]
