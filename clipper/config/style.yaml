@@ -47,8 +47,11 @@ short:
     outer_color: "#2A1A0A"
     emph_color: "#FFE600"
     emph_scale: 125
-  speakers:               # 話者ごとの字幕色。配信者名をキーに追加する
+  speakers:               # 話者ごとの字幕色（align が 女性/男性/読み上げ を自動で付ける。script の @名前: で上書き）
     default: "#FF8A1F"
+    女性: "#FF6FAE"
+    男性: "#3EA8FF"
+    読み上げ: "#6EDB5A"
   name_labels: []         # [{text: "ざき", x: 540, y: 690, color: "#FF8A1F"}]（letterbox 時に常時表示）
   crop:
     center_x: 0.5         # crop 時の切り抜き中心（0=左端, 1=右端）
@@ -78,6 +81,9 @@ long:
     emph_scale: 125
   speakers:
     default: "#FF8A1F"
+    女性: "#FF6FAE"
+    男性: "#3EA8FF"
+    読み上げ: "#6EDB5A"
   label:                  # 左上の常時ラベル（ゲーム名・局面など）
     x: 40
     y: 36

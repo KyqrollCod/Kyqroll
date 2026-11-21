@@ -5,6 +5,7 @@
   python -m clipper analyze WORK               # ③ 見どころ候補 → candidates.md
   python -m clipper draft WORK --pick 1,2,3    # ④ 候補から clips.yaml を下書き（字幕つき）
   python -m clipper align WORK [--only c01]    # 校正した script（テロップ文）に時刻を付けて subs を作る
+  python -m clipper build WORK [--only c01]    # clips.src.yaml→align→事前チェック→render→qc を一度に
   python -m clipper render WORK [--only c01]   # ⑤ 書き出し → WORK/out/
   python -m clipper qc WORK                    # ⑥ 品質チェック → WORK/out/qc.json と一覧画像
   python -m clipper run URL --pick 1-5         # ①〜⑥を通しで
@@ -114,10 +115,16 @@ def cmd_render(a):
     words = load_words(wd)
     out_dir = os.path.join(wd, "out")
     os.makedirs(out_dir, exist_ok=True)
+    from .progress import current
     reports = []
     for c in _clips(wd, a.only):
         out = os.path.join(out_dir, f"{c['id']}.mp4")
+        prog = current()
+        if prog:
+            prog.start(f"r:{c['id']}")
         r = render_clip(wd, c, st, gl, out, words)
+        if prog:
+            prog.done(f"r:{c['id']}", f"{r['duration']}秒")
         if c.get("format") == "long" and c.get("thumbnail_text"):
             r["thumbnail"] = make_thumbnail(c.get("source") or source_path(wd), float(c.get("thumbnail_at", c["start"])),
                                             c["thumbnail_text"], st, os.path.join(out_dir, f"{c['id']}_thumb.jpg"),
@@ -149,11 +156,18 @@ def cmd_qc(a):
             ok = False
             continue
         ass = (reports.get(c["id"]) or {}).get("ass") or os.path.join(out_dir, f"{c['id']}.ass")
+        from .progress import current
+        prog = current()
+        if prog:
+            prog.start(f"q:{c['id']}")
         r = check(path, c.get("format", "short"), st, ass,
                   os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None))
         results.append(r)
         ok &= r["pass"]
         bad = [f"{x['name']}: {x['detail']}" for x in r["checks"] if not x["ok"]]
+        if prog:
+            hard = [x["name"] for x in r["checks"] if not x["ok"] and x.get("hard", True)]
+            prog.done(f"q:{c['id']}", "合格" if r["pass"] else "不合格: " + ", ".join(hard), ok=r["pass"])
         print(f"  {c['id']}: {'PASS' if r['pass'] else 'FAIL'}" + ("".join(f"\n      - {b}" for b in bad)))
     save_json(os.path.join(out_dir, "qc.json"), results)
     return ok
@@ -163,6 +177,7 @@ def cmd_align(a):
     """clips.yaml: for every clip with `script:` (proofread telop lines), (re)build `subs` with timings."""
     from .render import load_words
     from .subs import align_script
+    from .transcribe import speech_spans
     wd = work_dir(a.work)
     path = os.path.join(wd, "clips.yaml")
     spec = load_yaml(path)
@@ -172,12 +187,90 @@ def cmd_align(a):
     for c in spec.get("clips", []):
         if not c.get("script") or (keep and c["id"] not in keep):
             continue
-        lines, warn = align_script(words, float(c["start"]), float(c["end"]), c["script"])
+        s0, s1 = float(c["start"]), float(c["end"])
+        speech = speech_spans(c.get("source") or source_path(wd), s0, s1)
+        lines, warn = align_script(words, s0, s1, c["script"], speech)
         c["subs"] = lines
         print(f"  {c['id']}: {len(lines)} lines" + "".join(f"\n      - {w}" for w in warn))
         bad |= bool(warn)
+    if not getattr(a, "no_speakers", False):
+        from .speakers import label_clips
+        done = [c for c in spec.get("clips", []) if c.get("script") and (not keep or c["id"] in keep)]
+        chat_p = os.path.join(wd, "chat.json")
+        rep = label_clips(source_path(wd), done, load_json(chat_p) if os.path.exists(chat_p) else [])
+        for name, r in rep.items():
+            print(f"  話者 {name}: {r['lines']}行（中央値 {r['f0']}Hz） 例: {' / '.join(r['examples'][:3])}")
     save_yaml(path, spec)
     return not bad
+
+
+def preflight(wd, only=None):
+    """Cheap checks that would otherwise fail only after a full render: every subtitle row fits
+    the qc row limit. Returns a list of problems (empty = go)."""
+    from .subs import dw, wrap
+    st = style()
+    probs = []
+    for c in _clips(wd, only):
+        fmt = c.get("format", "short")
+        sc = st[fmt]["subs"]
+        limit = st["qc"]["max_line_chars_short" if fmt == "short" else "max_line_chars_long"]
+        for ln in c.get("subs") or []:
+            rows = wrap(ln["text"], sc["max_chars_per_line"], sc["max_lines"])
+            bad = [r for r in rows if dw(r) > limit]
+            if bad:
+                probs.append(f"{c['id']}: 1行{limit}字超 {bad} ← 「{ln['text']}」に \\n を入れるか短く")
+    return probs
+
+
+def cmd_build(a):
+    """One iteration, stopping at the first problem: clips.src.yaml → clips.yaml → align →
+    preflight → render → qc. Nothing is rendered while a cheap check still fails."""
+    import shutil
+    from .progress import Progress
+    wd = work_dir(a.work)
+    src = os.path.join(wd, "clips.src.yaml")
+    dst = os.path.join(wd, "clips.yaml")
+    if os.path.exists(src):
+        # With --only, keep the already-aligned subs of the other clips (src has none).
+        old = {c["id"]: c for c in (load_yaml(dst).get("clips", []) if os.path.exists(dst) else [])}
+        shutil.copyfile(src, dst)
+        if a.only:
+            spec = load_yaml(dst)
+            keep = set(a.only.split(","))
+            for c in spec.get("clips", []):
+                if c["id"] not in keep and old.get(c["id"], {}).get("subs"):
+                    c["subs"] = old[c["id"]]["subs"]
+            save_yaml(dst, spec)
+    clips = _clips(wd, a.only)
+    # Rough time estimates (s) only weight the overall bar; the page recalibrates from elapsed time.
+    steps = [("align", "テロップの時刻合わせ・話者判定", 15 + 8 * len(clips))]
+    steps += [(f"r:{c['id']}", f"書き出し {c['id']}", 10 + 0.35 * (float(c['end']) - float(c['start'])))
+              for c in clips]
+    steps += [(f"q:{c['id']}", f"品質チェック {c['id']}", 20 + 0.08 * (float(c['end']) - float(c['start'])))
+              for c in clips]
+    prog = Progress(wd, f"{os.path.basename(wd)} の書き出し", steps)
+    print(f"  進捗ページ: {os.path.join(wd, 'progress.html')}", flush=True)
+    try:
+        prog.start("align")
+        if not cmd_align(a):
+            prog.done("align", "script の未一致あり", ok=False)
+            prog.finish(False, "テロップ文が文字起こしと一致しない行があります（書き出し前に停止）")
+            print("  STOP: script の未一致を直してから（render はしていません）")
+            return False
+        probs = preflight(wd, a.only)
+        if probs:
+            prog.done("align", "1行の文字数超過", ok=False)
+            prog.finish(False, "書き出し前チェックで停止: " + " / ".join(probs[:3]))
+            print("  STOP: 書き出し前チェック（render はしていません）" + "".join(f"\n      - {p}" for p in probs))
+            return False
+        prog.done("align")
+        cmd_render(a)
+        ok = cmd_qc(a)
+        prog.finish(ok, "全クリップ合格" if ok else "品質チェック不合格のクリップがあります")
+        return ok
+    except Exception as e:
+        prog.finish(False, f"エラー: {e}"[:300])
+        raise
 
 
 def cmd_calibrate(a):
@@ -212,7 +305,7 @@ def main(argv=None):
 
     def fetch_args(s):
         s.add_argument("url")
-        s.add_argument("--work-root", default=os.path.join(ROOT, "work"))
+        s.add_argument("--work-root", default=None, help="省略時は config/local.yaml の work_root（動画ごとにフォルダを作る）")
         s.add_argument("--cookies-from-browser", default=None, help="chrome / edge / firefox（自分のログイン済みブラウザ）")
         s.add_argument("--max-height", type=int, default=1080)
 
@@ -231,7 +324,12 @@ def main(argv=None):
     s = sub.add_parser("qc"); s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--asr", nargs="?", const="medium", default=None, help="書き出した動画を再度文字起こしして字幕の同期を検証")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_qc(a) else 1))
+    s = sub.add_parser("build", help="src→align→書き出し前チェック→render→qc を1回で（問題があれば render 前に止まる）")
+    s.add_argument("work"); s.add_argument("--only")
+    s.add_argument("--asr", nargs="?", const="large-v3", default="large-v3")
+    s.set_defaults(f=lambda a: sys.exit(0 if cmd_build(a) else 1))
     s = sub.add_parser("align"); s.add_argument("work"); s.add_argument("--only")
+    s.add_argument("--no-speakers", action="store_true", help="話者の色分けをしない")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_align(a) else 1))
     s = sub.add_parser("calibrate"); s.add_argument("work"); s.add_argument("--at", type=float, default=600); s.set_defaults(f=cmd_calibrate)
     s = sub.add_parser("run"); fetch_args(s); asr_args(s); s.add_argument("--pick", default="")

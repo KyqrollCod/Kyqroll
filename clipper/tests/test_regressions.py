@@ -214,6 +214,44 @@ def test_review_findings_transcript_and_align():
     ws += [{"start": 20, "end": 22, "word": "ゾンビモードだったね"}]
     lines, warn = align_script(ws, 0, 23, ["キモ！キモ！", "*ゾンビモード\nだったね"])
     assert not warn and lines[0]["start"] < 1 and lines[1]["start"] >= 19.9, (lines, warn)
+    # An exact line after an unscripted (dropped) stretch that also contains the next line's
+    # common words is still a match.
+    ws = [{"start": 0, "end": 1, "word": "だから暴力振ってんだ"},
+          {"start": 2, "end": 8, "word": "このネタやばいやばいやばい一生使うから食べ"},
+          {"start": 8, "end": 10, "word": "ちゃうよ食べちゃうよ"}, {"start": 10, "end": 12, "word": "やばいやばいやばい"}]
+    lines, warn = align_script(ws, 0, 12, ["だから暴力振ってんだ", "食べちゃうよ、食べちゃうよ", "やばいやばいやばい"])
+    assert not warn and lines[2]["start"] >= 9.9, (lines, warn)
+    # Kanji variant: the telop's 詰んだ against the ASR's 積んだ.
+    lines, warn = align_script([{"start": 0, "end": 2, "word": "積んだ!積んだ!積んだ!"}], 0, 3, ["詰んだ！詰んだ！詰んだ！"])
+    assert not warn and lines[0]["start"] < 0.5, (lines, warn)
+
+
+def test_telops_never_lead_the_voice():
+    # Whisper word starts run early; a telop starting in silence moves to the speech onset.
+    from clipper.subs import align_script
+    ws = [{"start": 1.0, "end": 3.0, "word": "こんにちは"}, {"start": 4.0, "end": 6.0, "word": "さようなら"}]
+    speech = [(1.6, 2.9), (4.5, 5.9)]
+    lines, _ = align_script(ws, 0, 7, ["こんにちは", "さようなら"], speech)
+    assert lines[0]["start"] == 1.6 and lines[1]["start"] == 4.5, lines
+    assert lines[0]["end"] <= lines[1]["start"]
+    # Already inside speech: unchanged (no 0.05 s lead either).
+    lines, _ = align_script(ws, 0, 7, ["こんにちは"], [(0.5, 3.0)])
+    assert lines[0]["start"] == 1.0, lines
+
+
+def test_progress_page():
+    from clipper.progress import Progress, current
+    d = tempfile.mkdtemp()
+    p = Progress(d, "テスト", [("align", "時刻合わせ", 10), ("r:c01", "書き出し c01", 30)])
+    assert current() is p
+    p.start("align"); p.done("align"); p.start("r:c01"); p.set_frac("r:c01", 0.5)
+    data = json.load(open(os.path.join(d, "progress.json"), encoding="utf-8"))
+    assert 0.5 < data["overall"] < 0.7 and data["steps"][1]["state"] == "run", data
+    page = open(os.path.join(d, "progress.html"), encoding="utf-8").read()
+    assert "実行中" in page and "http-equiv='refresh'" in page
+    p.finish(True, "全クリップ合格")
+    page = open(os.path.join(d, "progress.html"), encoding="utf-8").read()
+    assert "完了" in page and "refresh" not in page and current() is None
 
 
 def test_review_findings_ranges():
@@ -222,6 +260,9 @@ def test_review_findings_ranges():
     # 5. A keep that only touches a long silence does not save all of it.
     out = cut_silences([[0.0, 60.0]], [(23.5, 30.0)], keep=[(18.0, 24.0)])
     assert any(a <= 20 <= b for a, b in out) and not any(a <= 40 <= b for a, b in out), out
+    # drop: a line that must not air is removed, the rest stays.
+    from clipper.timeline import drop_ranges
+    assert drop_ranges([[0.0, 30.0], [40.0, 50.0]], [[10, 20], [45, 60]]) == [[0.0, 10.0], [20.0, 30.0], [40.0, 45.0]]
     # 8. No transcript words + keep: the whole clip stays.
     assert keep_ranges({"start": 0, "end": 60, "keep": [[18, 24]]}, [], tl) == [[0.0, 60.0]]
 

@@ -132,7 +132,16 @@ def is_note(text):
     return len(t) >= 2 and t[0] in "（(" and t[-1] in "）)"
 
 
-def align_script(words, start, end, script):
+def snap_to_speech(t, speech, limit, reach=2.5):
+    """A telop that starts during silence moves to the next speech onset (within `reach`
+    seconds and before `limit`). One that starts inside speech stays."""
+    if not speech or any(a - 0.05 <= t <= b for a, b in speech):
+        return t
+    nxt = next((a for a, _ in speech if t < a <= t + reach), None)
+    return nxt if nxt is not None and nxt < limit else t
+
+
+def align_script(words, start, end, script, speech=None):
     """Time hand-written telop lines against the transcript.
 
     Whisper's Japanese word timestamps put token boundaries mid-word (「いいねーう」「ちやっちまえ」),
@@ -170,8 +179,10 @@ def align_script(words, start, end, script):
         longest = max((b.size for b in blocks), default=0)
         # Matched chars scattered far apart, or only short scraps, are coincidences (a line
         # missing from the transcript picking letters out of the next lines), not a match.
-        if blocks and hit / len(key) >= 0.5 and spread <= max(2 * len(key), len(key) + 6) \
-                and longest >= max(min(2, len(key)), math.ceil(len(key) * 0.4)):
+        solid = longest >= max(min(2, len(key)), math.ceil(len(key) * 0.4))
+        # Kanji variants (詰んだ/積んだ) leave only short blocks, but tightly packed ones.
+        tight = hit / len(key) >= 0.6 and spread <= len(key) + 2
+        if blocks and hit / len(key) >= 0.5 and spread <= max(2 * len(key), len(key) + 6) and (solid or tight):
             return cur + blocks[0].b, cur + blocks[-1].b + blocks[-1].size - 1, hit
         return None, None, hit
 
@@ -180,19 +191,27 @@ def align_script(words, start, end, script):
         raw = str(raw).strip()
         if raw:
             text = raw.lstrip("*").strip()
+            m = re.match(r"@([^:：\s]+)[:：]\s*", text)   # "@男性:テキスト" forces the speaker
+            spk = m.group(1) if m else None
+            text = text[m.end():] if m else text
             key = _akey(text)
-            items.append((raw.startswith("*"), text, key, is_note(text) or not key))
+            items.append((raw.startswith("*"), text, key, is_note(text) or not key, spk))
     out, warn, cur = [], [], 0
-    for n, (emph, text, key, note) in enumerate(items):
+    for n, (emph, text, key, note, spk) in enumerate(items):
         ln = {"text": text, "start": None, "end": None}
         if emph:
             ln["emph"] = True
-        if not note:
+        if spk:
+            ln["speaker"] = spk
+        if note:
+            ln["_note"] = True
+        else:
             i0, i1, hit = match(key, cur)
-            if i0 is not None:
-                # A coincidental match that skips over the NEXT line's own words is wrong:
-                # the line is missing from the transcript.
-                nxt = next((k for _, _, k, nt in items[n + 1:] if not nt), None)
+            if i0 is not None and hit / len(key) < 0.85:
+                # A weak match that skips over the NEXT line's own words is a coincidence: the
+                # line is missing from the transcript. (A near-exact match is never one, even if
+                # common words like やばい also occur in the skipped stretch.)
+                nxt = next((k for _, _, k, nt, _ in items[n + 1:] if not nt), None)
                 if nxt and i0 - cur >= len(nxt) * 0.6 and match(nxt, cur, limit=i0)[0] is not None:
                     i0 = None
             if i0 is not None:
@@ -222,9 +241,15 @@ def align_script(words, start, end, script):
     for i in range(1, len(out)):  # keep events chronological
         out[i]["start"] = max(out[i]["start"], out[i - 1]["start"])
         out[i]["end"] = max(out[i]["end"], out[i]["start"] + 0.1)
+    # Never ahead of the voice: snap spoken lines that start in silence to the speech onset.
+    for i, ln in enumerate(out):
+        if speech and not ln.get("_note"):
+            ln["start"] = snap_to_speech(ln["start"], speech, ln["end"] - 0.25)
+            if i and out[i - 1]["end"] > ln["start"]:
+                out[i - 1]["end"] = max(out[i - 1]["start"] + 0.1, ln["start"])
+        ln.pop("_note", None)
+        ln["start"] = max(start, ln["start"])
     # Same display rules as auto_lines: minimum time, hold through short gaps.
-    for ln in out:
-        ln["start"] = max(start, ln["start"] - 0.05)
     for i, ln in enumerate(out):
         nxt = out[i + 1]["start"] if i + 1 < len(out) else end
         ln["end"] = min(nxt, ln["end"] + 0.25)

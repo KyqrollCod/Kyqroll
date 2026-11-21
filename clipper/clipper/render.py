@@ -11,7 +11,7 @@ import subprocess
 from .common import (ROOT, ff_escape, filter_script_args, fonts_dir, load_json, media_info, need, run,
                      source_path)
 from .subs import auto_lines, build_ass
-from .timeline import Mapper, cut_silences, keep_ranges
+from .timeline import Mapper, cut_silences, drop_ranges, keep_ranges
 
 
 def _asset(path, kind):
@@ -104,6 +104,8 @@ def render_clip(wd, clip, st, gl, out_path, words):
         kept = cut_silences(kept, source_silences(src, float(clip["start"]), float(clip["end"])),
                             keep=[tuple(map(float, k)) for k in clip.get("keep") or []],
                             min_segment=st["timeline"]["min_segment"])
+    if clip.get("drop"):
+        kept = drop_ranges(kept, clip["drop"], st["timeline"]["min_segment"])
     for a, b in kept:
         a2, b2 = math.floor(a * fps + 1e-6) / fps, math.ceil(b * fps - 1e-6) / fps
         if b2 > a2:
@@ -240,9 +242,17 @@ def render_clip(wd, clip, st, gl, out_path, words):
     else:
         venc += ["-preset", "p6", "-cq", str(enc["crf"]), "-b:v", "0"]
     stage1 = os.path.join(tmp, "stage1.mp4")
-    run([need("ffmpeg"), "-y", "-hide_banner", *inputs, *filter_script_args(graph),
+    from .progress import current
+    prog, prog_args = current(), []
+    if prog:  # live percentage on the progress page
+        pfile = os.path.join(tmp, "ffprogress.txt")
+        prog_args = ["-progress", pfile, "-nostats"]
+        prog.watch_ffmpeg(f"r:{clip.get('id')}", pfile, dur)
+    run([need("ffmpeg"), "-y", "-hide_banner", *prog_args, *inputs, *filter_script_args(graph),
          "-map", "[outv]", "-map", "[outa]", "-r", str(fps), *venc, "-pix_fmt", "yuv420p",
          "-c:a", "pcm_s16le", "-t", f"{dur:.3f}", "-f", "mov", stage1])
+    if prog:
+        prog.stop_watch()
 
     # 6) Two-pass loudness normalization (EBU R128), video stream copied.
     au = st["audio"]

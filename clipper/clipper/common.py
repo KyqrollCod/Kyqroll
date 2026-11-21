@@ -35,6 +35,19 @@ def style(path=None):
     return load_yaml(path or os.path.join(ROOT, "config", "style.yaml"))
 
 
+def default_work_root():
+    """Where fetch creates one folder per video. Machine-local, so it lives outside git:
+    env CLIPPER_WORK_ROOT, else config/local.yaml `work_root`, else clipper/work."""
+    if os.environ.get("CLIPPER_WORK_ROOT"):
+        return os.environ["CLIPPER_WORK_ROOT"]
+    local = os.path.join(ROOT, "config", "local.yaml")
+    if os.path.exists(local):
+        root = (load_yaml(local) or {}).get("work_root")
+        if root:
+            return root
+    return os.path.join(ROOT, "work")
+
+
 def glossary(path=None):
     g = load_yaml(path or os.path.join(ROOT, "config", "glossary.yaml"))
     g.setdefault("terms", [])
