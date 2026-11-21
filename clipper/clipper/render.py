@@ -6,11 +6,12 @@ import tempfile
 
 import math
 import shutil
+import subprocess
 
 from .common import (ROOT, ff_escape, filter_script_args, fonts_dir, load_json, media_info, need, run,
                      source_path)
 from .subs import auto_lines, build_ass
-from .timeline import Mapper, keep_ranges
+from .timeline import Mapper, cut_silences, keep_ranges
 
 
 def _asset(path, kind):
@@ -33,11 +34,25 @@ def _fill(label_in, rect, W, H, src_w, src_h, label_out):
             f"flags=lanczos,crop={W}:{H}[{label_out}]")
 
 
+def tree_expr(terms, op, k=8):
+    """Join ffmpeg expression terms as a balanced tree of parenthesized groups.
+
+    ffmpeg's expression parser has a nesting-depth limit (a flat chain of ~100 terms fails with
+    "Cannot allocate memory" in ffmpeg 7.1+/9), and a long stream with many cuts easily has more.
+    Groups of k keep the depth at log_k(n)."""
+    terms = list(terms)
+    if not terms:
+        return ""
+    while len(terms) > 1:
+        terms = ["(" + op.join(terms[i:i + k]) + ")" for i in range(0, len(terms), k)]
+    return terms[0]
+
+
 def _zoom_expr(zooms):
     if not zooms:
         return None
-    terms = "+".join(f"{z['scale'] - 1:.3f}*between(t\\,{z['out_start']:.3f}\\,{z['out_end']:.3f})"
-                     for z in zooms)
+    terms = tree_expr((f"{z['scale'] - 1:.3f}*between(t\\,{z['out_start']:.3f}\\,{z['out_end']:.3f})"
+                       for z in zooms), "+")
     return f"(1+{terms})"
 
 
@@ -59,6 +74,19 @@ def build_clip_lines(clip, words, gl, st, fmt):
     return auto_lines(words, float(clip["start"]), float(clip["end"]), sc["max_chars_per_line"], gl)
 
 
+def source_silences(src, start, end, noise="-45dB", min_dur=1.0):
+    """(start, duration) of audible silences in [start, end], in source time. Same threshold as
+    the qc dead_air check, so what qc would flag is what gets cut."""
+    p = subprocess.run([need("ffmpeg"), "-hide_banner", "-nostats", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}",
+                        "-i", src, "-vn", "-af", f"silencedetect=n={noise}:d={min_dur}", "-f", "null", "-"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+    out = []
+    for m in re.finditer(r"silence_end: ([\d.]+) \| silence_duration: ([\d.]+)", p.stderr):
+        e, d = float(m.group(1)), float(m.group(2))
+        out.append((start + e - d, d))
+    return out
+
+
 def render_clip(wd, clip, st, gl, out_path, words):
     fmt = clip.get("format", "short")
     cfg = st[fmt]
@@ -71,7 +99,12 @@ def render_clip(wd, clip, st, gl, out_path, words):
     # Snap every range to the frame grid so the video frames kept by select, the audio samples
     # kept by aselect and the Mapper used for telops all agree exactly (no drift across cuts).
     ranges = []
-    for a, b in keep_ranges(clip, words, st["timeline"]):
+    kept = keep_ranges(clip, words, st["timeline"])
+    if clip.get("trim_silence", True) and not clip.get("segments") and info["has_audio"]:
+        kept = cut_silences(kept, source_silences(src, float(clip["start"]), float(clip["end"])),
+                            keep=[tuple(map(float, k)) for k in clip.get("keep") or []],
+                            min_segment=st["timeline"]["min_segment"])
+    for a, b in kept:
         a2, b2 = math.floor(a * fps + 1e-6) / fps, math.ceil(b * fps - 1e-6) / fps
         if b2 > a2:
             ranges.append([round(a2, 6), round(b2, 6)])
@@ -107,14 +140,14 @@ def render_clip(wd, clip, st, gl, out_path, words):
     # 1) One decode path: keep frames inside the ranges, then re-time them back to back.
     #    (Parallel trim branches make ffmpeg buffer the whole window in memory.)
     # Half-open [a, b): a closed range would keep one extra frame per cut on the frame grid.
-    sel = "+".join(f"gte(t\\,{a - 0.5 / fps:.6f})*lt(t\\,{b - 0.5 / fps:.6f})" for a, b in rel)
-    asel = "+".join(f"gte(t\\,{a:.6f})*lt(t\\,{b:.6f})" for a, b in rel)
+    sel = tree_expr((f"gte(t\\,{a - 0.5 / fps:.6f})*lt(t\\,{b - 0.5 / fps:.6f})" for a, b in rel), "+")
+    asel = tree_expr((f"gte(t\\,{a:.6f})*lt(t\\,{b:.6f})" for a, b in rel), "+")
     g.append(f"[0:v]fps={fps},select='{sel}',setpts=N/{fps}/TB[cv]")
     if info["has_audio"]:
         # 1 ms audio frames make the cut sample-accurate enough, and 8 ms fades at every seam
         # (a product of ramps around each boundary) avoid clicks.
         bounds = sorted({round(x, 3) for ab in rel for x in ab})
-        ramp = "*".join(f"min(1\\,abs(t-{b:.3f})/0.008)" for b in bounds)
+        ramp = tree_expr((f"min(1\\,abs(t-{b:.3f})/0.008)" for b in bounds), "*")
         g.append(f"[0:a]aresample=48000,asetnsamples=n=48:p=0,volume='{ramp}':eval=frame,aselect='{asel}',"
                  f"asetpts=N/SR/TB[ca]")
     else:

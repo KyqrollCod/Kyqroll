@@ -1,4 +1,5 @@
 """Subtitle lines from word timestamps, and ASS documents for shorts and long videos."""
+import math
 import re
 
 from .common import apply_glossary, ass_color
@@ -113,6 +114,126 @@ def auto_lines(words, start, end, max_chars, gl, gap_break=0.35, max_lines=2):
         if nxt - ln["end"] < 0.5:
             ln["end"] = nxt
     return lines
+
+
+_ALIGN_SKIP = re.compile(r"[\s、。,.!！?？…「」『』（）()・~〜ー\-]")
+
+
+def _akey(text):
+    """Matching key: punctuation dropped, katakana folded to hiragana (ASR writes きも for キモ)."""
+    t = _ALIGN_SKIP.sub("", text)
+    return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in t)
+
+
+def is_note(text):
+    """A telop wholly in brackets — （英語音声の訳） or (BGM) — is a note, not a transcript line.
+    Shared by align (timed by neighbours) and qc (left out of the ASR sync score)."""
+    t = str(text).strip().replace("\n", "")
+    return len(t) >= 2 and t[0] in "（(" and t[-1] in "）)"
+
+
+def align_script(words, start, end, script):
+    """Time hand-written telop lines against the transcript.
+
+    Whisper's Japanese word timestamps put token boundaries mid-word (「いいねーう」「ちやっちまえ」),
+    so pause-based auto lines split words. Proofreading is easier as plain text: write the
+    corrected lines in order and this assigns each one the time of the characters it matches.
+    A line starting with '*' is emphasized; a line in （） is a translation/note (game voice) and is
+    timed by its neighbours, not matched. Returns (lines, warnings)."""
+    import difflib
+    ws = [w for w in words if w["end"] > start - 1 and w["start"] < end + 1 and w["word"].strip()]
+    chars, times = [], []
+    for w in ws:
+        t = _akey(w["word"])
+        if not t:
+            continue
+        span = max(0.01, w["end"] - w["start"])
+        for i, ch in enumerate(t):
+            chars.append(ch)
+            times.append((w["start"] + span * i / len(t), w["start"] + span * (i + 1) / len(t)))
+    stream = "".join(chars)
+
+    def match(key, cur, limit=None):
+        """(i0, i1, hit) of key in stream from cur, or (None, None, hit)."""
+        hit, blocks = 0, []
+        # Narrow window first: the longest-block matcher would otherwise jump to a later,
+        # better-transcribed repeat of the same phrase and desync every line after it.
+        # Last tier: the rest of the clip, for lines after a stretch of unscripted talk.
+        for width in (int(len(key) * 1.5) + 8, len(key) * 3 + 60, len(stream)):
+            win_end = min(len(stream) if limit is None else limit, cur + width)
+            sm = difflib.SequenceMatcher(None, key, stream[cur:win_end], autojunk=False)
+            blocks = [b for b in sm.get_matching_blocks() if b.size]
+            hit = sum(b.size for b in blocks)
+            if blocks and hit / len(key) >= 0.6:
+                break
+        spread = (blocks[-1].b + blocks[-1].size - blocks[0].b) if blocks else 0
+        longest = max((b.size for b in blocks), default=0)
+        # Matched chars scattered far apart, or only short scraps, are coincidences (a line
+        # missing from the transcript picking letters out of the next lines), not a match.
+        if blocks and hit / len(key) >= 0.5 and spread <= max(2 * len(key), len(key) + 6) \
+                and longest >= max(min(2, len(key)), math.ceil(len(key) * 0.4)):
+            return cur + blocks[0].b, cur + blocks[-1].b + blocks[-1].size - 1, hit
+        return None, None, hit
+
+    items = []
+    for raw in script:
+        raw = str(raw).strip()
+        if raw:
+            text = raw.lstrip("*").strip()
+            key = _akey(text)
+            items.append((raw.startswith("*"), text, key, is_note(text) or not key))
+    out, warn, cur = [], [], 0
+    for n, (emph, text, key, note) in enumerate(items):
+        ln = {"text": text, "start": None, "end": None}
+        if emph:
+            ln["emph"] = True
+        if not note:
+            i0, i1, hit = match(key, cur)
+            if i0 is not None:
+                # A coincidental match that skips over the NEXT line's own words is wrong:
+                # the line is missing from the transcript.
+                nxt = next((k for _, _, k, nt in items[n + 1:] if not nt), None)
+                if nxt and i0 - cur >= len(nxt) * 0.6 and match(nxt, cur, limit=i0)[0] is not None:
+                    i0 = None
+            if i0 is not None:
+                ln["start"], ln["end"] = times[i0][0], times[i1][1]
+                cur = i1 + 1
+            else:
+                warn.append(f"未一致（{hit}/{len(key)}文字）: {text}")
+        out.append(ln)
+    # Notes and unmatched lines: share the gap between their timed neighbours, never past
+    # the next timed line (that would push it late).
+    i = 0
+    while i < len(out):
+        if out[i]["start"] is not None:
+            i += 1
+            continue
+        j = i
+        while j < len(out) and out[j]["start"] is None:
+            j += 1
+        a = out[i - 1]["end"] if i > 0 else start
+        b = out[j]["start"] if j < len(out) else end
+        if b - a < 0.7 * (j - i):
+            warn.append(f"注釈・未一致の行に表示時間が足りません（{b - a:.1f}秒に{j - i}行）: {out[i]['text']}")
+        step = max(0.0, b - a) / (j - i)
+        for k in range(i, j):
+            out[k]["start"], out[k]["end"] = a + step * (k - i), a + step * (k - i + 1)
+        i = j
+    for i in range(1, len(out)):  # keep events chronological
+        out[i]["start"] = max(out[i]["start"], out[i - 1]["start"])
+        out[i]["end"] = max(out[i]["end"], out[i]["start"] + 0.1)
+    # Same display rules as auto_lines: minimum time, hold through short gaps.
+    for ln in out:
+        ln["start"] = max(start, ln["start"] - 0.05)
+    for i, ln in enumerate(out):
+        nxt = out[i + 1]["start"] if i + 1 < len(out) else end
+        ln["end"] = min(nxt, ln["end"] + 0.25)
+        if ln["end"] - ln["start"] < 0.7:   # minimum on-screen time, never over the next line
+            ln["end"] = max(ln["end"], min(nxt, ln["start"] + 0.7))
+        if nxt - ln["end"] < 0.5:
+            ln["end"] = max(ln["end"], nxt)
+        ln["start"], ln["end"] = round(ln["start"], 2), round(min(end, ln["end"]), 2)
+    return out, warn
 
 
 HIRA = re.compile(r"[ぁ-ゖ]")

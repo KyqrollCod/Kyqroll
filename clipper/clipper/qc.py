@@ -3,7 +3,7 @@ import os
 import re
 
 from .common import media_info, need, run
-from .subs import dw
+from .subs import dw, is_note
 
 
 def _parse_intervals(err, kind):
@@ -27,7 +27,10 @@ def _ts(x):
 
 
 def _norm(t):
-    return re.sub(r"[\s、。！？!?…「」『』・,.~〜ー]", "", t)
+    """Compare by sound, not spelling: punctuation dropped, katakana folded to hiragana
+    (ASR writes 「ヤバイ」 where the telop says 「やばい」)."""
+    t = re.sub(r"[\s、。！？!?…「」『』（）()・,.~〜ー]", "", t)
+    return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in t)
 
 
 def asr_sync(path, ass_path, model="medium"):
@@ -38,6 +41,8 @@ def asr_sync(path, ass_path, model="medium"):
     import subprocess
     import difflib
     import numpy as np
+    from .transcribe import _cuda_dll_paths
+    _cuda_dll_paths()  # Windows: pip's cuBLAS/cuDNN DLLs are not on the loader path otherwise
     from faster_whisper import WhisperModel
     p = subprocess.run([need("ffmpeg"), "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "16000",
                         "-f", "f32le", "-"], stdout=subprocess.PIPE, check=True)
@@ -57,19 +62,20 @@ def asr_sync(path, ass_path, model="medium"):
             f = line.split(",")
             body = re.sub(r"\{[^}]*\}", "", line.rstrip("\n").split(",", 9)[9]).replace("\\N", "")
             events.append((_ts(f[1]), _ts(f[2]), body.strip()))
-    ok, bad = 0, []
+    ok, bad, checked = 0, [], 0
     for a, b, text in events:
         heard = "".join(w.word for w in words if a - 0.4 <= (w.start + w.end) / 2 <= b + 0.4)
         t, h = _norm(text), _norm(heard)
-        if not t:
-            continue
+        if not t or is_note(text):
+            continue  # （…） is a translation of game/English audio, not a transcript of speech
+        checked += 1
         sm = difflib.SequenceMatcher(None, t, h)
         cover = sum(x.size for x in sm.get_matching_blocks()) / len(t)
         if cover >= 0.6:
             ok += 1
         else:
             bad.append({"at": round(a, 2), "sub": text, "heard": heard, "cover": round(cover, 2)})
-    return (ok / len(events) if events else 1.0), bad
+    return (ok / checked if checked else 1.0), bad
 
 
 def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None):

@@ -32,6 +32,8 @@ python -m clipper run "https://www.youtube.com/watch?v=XXXX" --cookies-from-brow
 ```
 
 一つずつ進める場合と、Claude の編集工程は `.claude/skills/clip/SKILL.md` を参照。
+テロップは `clips.yaml` の `script:` に校正済みの文を並べて `python -m clipper align WORK` を実行すると、
+文字単位で時刻が付きます（Whisper の単語境界のずれを手で直す必要がありません）。
 成果物は `work/<id>/out/` に出ます（`c01s.mp4` ＝ ショート、`c01l.mp4` ＝ 横動画、`*_thumb.jpg`、`qc.json`）。
 
 ## チャンネルの「型」を変える
@@ -46,7 +48,7 @@ python -m clipper run "https://www.youtube.com/watch?v=XXXX" --cookies-from-brow
 ```bash
 python tests/test_pipeline.py        # 合成した配信で 解析→下書き→書き出し(4種)→QC が全て通ること
 python tests/test_events.py          # 画面イベント（テンプレート一致）の検出
-python tests/test_regressions.py     # 独立レビューで見つかった不具合の再発防止（15項目）
+python tests/test_regressions.py     # 独立レビューと実配信で見つかった不具合の再発防止
 ```
 
 フォント: M PLUS Rounded 1c Black / Dela Gothic One（SIL Open Font License、`assets/fonts/OFL.txt`）。
