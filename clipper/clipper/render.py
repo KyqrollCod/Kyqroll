@@ -333,6 +333,9 @@ def render_clip(wd, clip, st, gl, out_path, words):
 
         def _gain(name):   # songs from the music list are evened out to the built-in BGM's loudness
             return float((cat.get(str(name)) or {}).get("gain_db") or 0.0)
+        for nm in [bgm] + ([clip["bgm_switch"]["bgm"]] if clip.get("bgm_switch") else []):
+            if fmt != "short" and (cat.get(str(nm)) or {}).get("shorts_only"):
+                raise ValueError(f"{clip.get('id')}: 曲「{nm}」はショート専用です（横型には使えません。曲リストを参照）")
         db = float(clip.get('bgm_db', cfg.get('bgm_db', -22))) + _gain(bgm)
         # bgm_offset: start the track this many seconds in (a song's hook, not its intro).
         # bgm_switch {at: <source sec>, bgm, offset}: cross to a second track at the peak (転),

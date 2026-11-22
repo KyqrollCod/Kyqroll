@@ -411,19 +411,24 @@ def write_music(root):
         for s in lst:
             a = rel(s.get("file", ""))
             hook = s.get("hook_sec")
+            only = "<span class='tag warn'>ショート専用</span>" if s.get("shorts_only") else ""
+            where = (f"<a href='{_e(s.get('page'))}' target='_blank'>配布ページ</a>" if s.get("page")
+                     else f"<span>{_e(s.get('source'))}</span>")
+            player = f"<audio controls preload='none' src='{a}'></audio>" if a else ""
+            jump = (f"<button class='copy' style='position:static' onclick=\"const au=this.parentElement."
+                    f"querySelector('audio');au.currentTime={hook};au.play()\">盛り上がりから再生</button>"
+                    if a and hook else "")
             parts.append(
                 f"<div class='song'><div><div class='row'><span class='title'>{_e(s['title'])}</span>"
                 f"<span class='crumb'>{_e(s.get('artist'))}</span>"
-                f"<span class='tag k' title='clips.src.yaml に書く名前'>{_e(s['key'])}</span></div>"
+                f"<span class='tag k' title='clips.src.yaml に書く名前'>{_e(s['key'])}</span>{only}</div>"
                 f"<div>{_e(s.get('scenes'))}</div><div class='crumb'>{_e(s.get('note'))}</div>"
                 f"<div class='links'><span>盛り上がり {sec(hook)}</span><span>長さ {sec(s.get('duration'))}</span>"
-                f"<span>音量補正 {s.get('gain_db', 0):+}dB</span><a href='{_e(s.get('page'))}' target='_blank'>配布ページ</a>"
+                f"<span>音量補正 {s.get('gain_db', 0):+}dB</span>{where}"
                 f"<span>{_e(s.get('license'))}</span></div></div>"
-                f"<div style='min-width:260px'>" + (f"<audio controls preload='none' src='{a}'></audio>" if a else "") +
-                (f"<button class='copy' style='position:static' onclick=\"const au=this.parentElement.querySelector('audio');"
-                 f"au.currentTime={hook};au.play()\">盛り上がりから再生</button>" if a and hook else "") + "</div></div>")
+                f"<div style='min-width:260px'>{player}{jump}</div></div>")
             md.append(f"| `{s['key']}` | {s['title']} / {s.get('artist')} | {s.get('scenes')} | {sec(hook)} | "
-                      f"{sec(s.get('duration'))} | {s.get('note')} |")
+                      f"{sec(s.get('duration'))} | {'【ショート専用】' if s.get('shorts_only') else ''}{s.get('note')} |")
         if not lst:
             parts.append("<div class='song empty'>まだ曲がありません</div>")
         parts.append("</section>")
@@ -441,6 +446,8 @@ def write_music(root):
            "- 曲は配布元の利用条件を確認してから使う（作曲者ごとの追加条件は 曲リスト.yaml の artist_terms）。",
            "- ショートの権利もの楽曲は、作曲者が明確に禁止していない限り使ってよい（オーナー判断 2026-11-22。"
            "Content ID の申し立ては収益が権利者に回る扱いとして許容）。申し立ての結果は投稿担当が published.json に記録する。",
+           "- 【ショート専用】の曲（権利もの）は横型に使わない。横型は申し立てで地域ブロックされると流入が止まるため。",
+           "- 歌入りの曲は声とぶつかるので、セリフの少ない山場（転）や締めに使う。",
            "- Claude が入手できない曲はオーナーに依頼する（上の表）。届いた音源は files/ に置き、曲リスト.yaml に追記する。", ""]
     with open(os.path.join(root, "_素材", "BGM", "曲リスト.md"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(md))
