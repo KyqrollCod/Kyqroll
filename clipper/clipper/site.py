@@ -435,6 +435,15 @@ def write_tasks(root):
         except OSError:
             pass
         running.append(("過去配信の準備（取得・文字起こし）", last, _ago(pa), "/prepare.log"))
+    wlog = os.path.join(root, "_状況", "watch.log")
+    wa = _age(wlog)
+    if wa is not None and wa < 3600:
+        try:
+            with open(wlog, encoding="utf-8", errors="replace") as fh:
+                wl = [ln.strip() for ln in fh.readlines()[-12:] if ln.strip() and "Deprecated" not in ln]
+            running.append(("新着アーカイブの監視（20分ごと）", " ／ ".join(wl[-2:]), _ago(wa), "/_%E7%8A%B6%E6%B3%81/watch.log"))
+        except OSError:
+            pass
     if _gpu_busy():
         running.append(("GPU 使用中", "文字起こし・声の分離・品質チェックの聞き取りのどれかが動いています", "いま", ""))
     for note in (_lj(os.path.join(root, "_状況", "作業中.json"), {}) or {}).get("tasks", []):
@@ -490,7 +499,13 @@ def write_tasks(root):
                      f"<td>{_e(q.get('title'))}</td><td><span class='tag {'ok' if (q.get('stream'), q.get('clip')) in done_ids else ''}'>"
                      f"{'予約済み' if (q.get('stream'), q.get('clip')) in done_ids else '予定'}</span></td></tr>" for q in soon)
     hold_html = "".join(f"<div class='banner'>保留: {_e(h.get('stream_prefix'))} — {_e(h.get('reason'))}</div>" for h in holds)
-    body = (f"<h2>いま動いている処理</h2>{run_html}{hold_html}"
+    eq = _lj(os.path.join(root, "_状況", "編集待ち.json"), {}) or {}
+    eq_rows = [(x, "新着", "ok") for x in eq.get("fresh", [])] + [(x, "ストック", "") for x in eq.get("stock", [])]
+    eq_html = ("<h2>編集待ちリスト（新着が先、ストックはその後）</h2><table class='tbl'><tr><th>順</th><th>区分</th><th>配信日</th><th>配信</th><th>準備</th></tr>"
+               + "".join(f"<tr><td>{i + 1}</td><td><span class='tag {c}'>{k}</span></td><td>{_e(x.get('date'))}</td>"
+                         f"<td>{_e(x.get('title'))}</td><td>{'済' if x.get('prepared') else '準備中'}</td></tr>"
+                         for i, (x, k, c) in enumerate(eq_rows[:12])) + "</table>") if eq_rows else ""
+    body = (f"<h2>いま動いている処理</h2>{run_html}{hold_html}{eq_html}"
             "<h2>配信ごとの段階（準備 → 編集 → 品質チェック → 投稿待ち → 予約）</h2>"
             "<table class='tbl'><tr><th>配信日</th><th>配信</th><th>段階</th><th>合格</th><th>最初の公開予定</th></tr>"
             + "".join(board) + "</table>"

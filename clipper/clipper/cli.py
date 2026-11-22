@@ -13,6 +13,8 @@
 """
 import argparse
 import os
+import re
+import subprocess
 import sys
 
 from .common import (ROOT, glossary, load_json, load_yaml, media_info, need, run, save_json, save_yaml,
@@ -478,6 +480,73 @@ def cmd_prepare(a):
     return ok
 
 
+def _twitch_archives(login):
+    """[(video_id, title, created_at, recording)] newest first, from the public Twitch GQL."""
+    import json as _json
+    import urllib.request
+    q = ('query($l: String!) { user(login: $l) { videos(first: 50, type: ARCHIVE, sort: TIME) '
+         '{ edges { node { id title createdAt status } } } } }')
+    req = urllib.request.Request("https://gql.twitch.tv/gql", data=_json.dumps({"query": q, "variables": {"l": login}}).encode(),
+                                 headers={"Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        edges = ((_json.loads(r.read())["data"]["user"] or {}).get("videos") or {}).get("edges") or []
+    return [(e["node"]["id"], e["node"]["title"], e["node"]["createdAt"], e["node"]["status"] == "RECORDING") for e in edges]
+
+
+def write_edit_queue(root, fresh_days=3):
+    """_状況/編集待ち.json: streams that are prepared but not edited yet. Fresh streams (≤ fresh_days
+    old) come first, newest first; older ones are stock. Owner 2026-11-22: new streams cut in line."""
+    import datetime as _dt
+    today = _dt.date.today()
+    fresh, stock = [], []
+    for n in sorted(os.listdir(root), reverse=True):
+        wd = os.path.join(root, n)
+        if n.startswith("_") or not os.path.isdir(wd) or not os.path.exists(os.path.join(wd, "meta.json")):
+            continue
+        if os.path.exists(os.path.join(wd, "clips.src.yaml")):
+            continue
+        meta = load_json(os.path.join(wd, "meta.json"))
+        d = meta.get("upload_date") or n[:8]
+        try:
+            age = (today - _dt.date(int(d[:4]), int(d[4:6]), int(d[6:8]))).days
+        except ValueError:
+            age = 999
+        item = {"folder": n, "title": meta.get("title"), "date": d, "prepared": os.path.exists(os.path.join(wd, "candidates.json"))}
+        (fresh if age <= fresh_days else stock).append(item)
+    data = {"updated": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "fresh": fresh, "stock": stock}
+    os.makedirs(os.path.join(root, "_状況"), exist_ok=True)
+    save_json(os.path.join(root, "_状況", "編集待ち.json"), data)
+    return data
+
+
+def cmd_watch(a):
+    """Keep the archive complete: every `--every` minutes, prepare every finished Twitch archive of
+    the channel that has no folder yet (newest first; a stream still recording waits until it ends),
+    then rebuild the editing queue (fresh first, then stock)."""
+    import time as _t
+    from .common import default_work_root
+    root = default_work_root()
+    login = a.channel.rstrip("/").split("/")[-1]
+    while True:
+        try:
+            have = {m.group(1) for m in (re.search(r"tw_(\d+)$", n) for n in os.listdir(root)) if m}
+            vids = _twitch_archives(login)
+            live = [v for v in vids if v[3]]
+            todo = [v for v in vids if not v[3] and v[0] not in have]
+            stamp = _t.strftime("%m/%d %H:%M")
+            print(f"[{stamp}] アーカイブ {len(vids)}本・未取得 {len(todo)}本" + (f"・配信中 {live[0][1]}（終わってから取得）" if live else ""), flush=True)
+            for vid, title, *_ in todo:
+                print(f"  取得開始: {title} ({vid})", flush=True)
+                subprocess.run([sys.executable, "-m", "clipper", "prepare", f"https://www.twitch.tv/videos/{vid}"])
+            q = write_edit_queue(root)
+            print(f"  編集待ち: 新着 {len(q['fresh'])}本・ストック {len(q['stock'])}本", flush=True)
+        except Exception as e:  # noqa: BLE001 — a network hiccup must not stop the watch
+            print(f"  確認に失敗（次回やり直し）: {e}", flush=True)
+        if a.once:
+            return
+        _t.sleep(a.every * 60)
+
+
 def cmd_serve(a):
     """The local site (http://localhost:8765/). tasks.html is rebuilt on every request and the
     video list at most once a minute, so the pages are always current without a separate job."""
@@ -608,6 +677,11 @@ def main(argv=None):
     s = sub.add_parser("site", help="一覧ページ・動画ページ・delivery.md を作り直す（省略時は全動画）")
     s.add_argument("work", nargs="?", default=None)
     s.set_defaults(f=cmd_site)
+    s = sub.add_parser("watch", help="チャンネルの新しいアーカイブを定期的に取得し、編集待ちリストを更新")
+    s.add_argument("channel", help="例: https://www.twitch.tv/roaroa8")
+    s.add_argument("--every", type=int, default=20, help="確認の間隔（分）")
+    s.add_argument("--once", action="store_true")
+    s.set_defaults(f=cmd_watch)
     s = sub.add_parser("serve", help="ローカルのサイトを開く（動いているタスク・動画一覧・曲リスト）")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--host", default="127.0.0.1")
