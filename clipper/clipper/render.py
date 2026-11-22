@@ -345,19 +345,20 @@ def render_clip(wd, clip, st, gl, out_path, words):
         if t_sw is not None and not (1.0 < t_sw < dur - 1.0):
             t_sw = None
         x = 0.4
+        fo = 0.3 if fmt == "short" else 1.2   # Shorts loop: end on the punchline, not a long fade
         inputs += ["-stream_loop", "-1", "-ss", f"{float(clip.get('bgm_offset', 0)):.3f}", "-i", _bgm_file(bgm)]
         end1 = (t_sw + x) if t_sw is not None else dur
         g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=N/SR/TB,"
                  f"volume={db}dB,atrim=duration={end1:.3f},"
-                 f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, end1 - (x if t_sw is not None else 1.2)):.3f}"
-                 f":d={x if t_sw is not None else 1.2}[bgmA]")
+                 f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, end1 - (x if t_sw is not None else fo)):.3f}"
+                 f":d={x if t_sw is not None else fo}[bgmA]")
         idx += 1
         if t_sw is not None:
             inputs += ["-stream_loop", "-1", "-ss", f"{float(sw.get('offset', 0)):.3f}", "-i", _bgm_file(sw["bgm"])]
             db2 = float(sw.get("db", float(clip.get('bgm_db', cfg.get('bgm_db', -22))))) + _gain(sw["bgm"])
             g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=N/SR/TB,"
                      f"volume={db2}dB,atrim=duration={dur - t_sw:.3f},"
-                     f"afade=t=in:d={x},afade=t=out:st={max(0.0, dur - t_sw - 1.2):.3f}:d=1.2,"
+                     f"afade=t=in:d={x},afade=t=out:st={max(0.0, dur - t_sw - fo):.3f}:d={fo},"
                      f"adelay={int(t_sw * 1000)}:all=1[bgmB]")
             g.append("[bgmA][bgmB]amix=inputs=2:normalize=0:duration=longest[bgmX]")
             idx += 1
