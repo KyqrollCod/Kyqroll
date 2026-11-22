@@ -324,11 +324,37 @@ def render_clip(wd, clip, st, gl, out_path, words):
     bgm = clip.get("bgm", cfg.get("bgm"))
     if bgm and str(bgm).lower() != "none":
         from .audiogen import bgm_path
-        path = bgm if os.path.isabs(str(bgm)) else bgm_path(str(bgm))
-        inputs += ["-stream_loop", "-1", "-i", path]
+
+        def _bgm_file(name):
+            return name if os.path.isabs(str(name)) else bgm_path(str(name))
+        db = float(clip.get('bgm_db', cfg.get('bgm_db', -22)))
+        # bgm_offset: start the track this many seconds in (a song's hook, not its intro).
+        # bgm_switch {at: <source sec>, bgm, offset}: cross to a second track at the peak (転),
+        # e.g. comical build-up → tension/hype from the moment things blow up.
+        sw = clip.get("bgm_switch") or None
+        t_sw = mp.to_out_clamped(float(sw["at"])) if sw else None
+        if t_sw is not None and not (1.0 < t_sw < dur - 1.0):
+            t_sw = None
+        x = 0.4
+        inputs += ["-stream_loop", "-1", "-ss", f"{float(clip.get('bgm_offset', 0)):.3f}", "-i", _bgm_file(bgm)]
+        end1 = (t_sw + x) if t_sw is not None else dur
         g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
-                 f"volume={float(clip.get('bgm_db', cfg.get('bgm_db', -22)))}dB,atrim=duration={dur:.3f},"
-                 f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, dur - 1.2):.3f}:d=1.2[bgr]")
+                 f"volume={db}dB,atrim=duration={end1:.3f},"
+                 f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, end1 - (x if t_sw is not None else 1.2)):.3f}"
+                 f":d={x if t_sw is not None else 1.2}[bg1]")
+        idx += 1
+        if t_sw is not None:
+            inputs += ["-stream_loop", "-1", "-ss", f"{float(sw.get('offset', 0)):.3f}", "-i", _bgm_file(sw["bgm"])]
+            db2 = float(sw.get("db", db))
+            g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
+                     f"volume={db2}dB,atrim=duration={dur - t_sw:.3f},"
+                     f"afade=t=in:d={x},afade=t=out:st={max(0.0, dur - t_sw - 1.2):.3f}:d=1.2,"
+                     f"adelay={int(t_sw * 1000)}:all=1[bg2]")
+            g.append("[bg1][bg2]amix=inputs=2:normalize=0:duration=longest[bgr]")
+            idx += 1
+        else:
+            g.append("[bg1]anull[bgr]")
+        idx -= 1   # the shared `idx += 1` below accounts for the last BGM input
         g.append("[ca2]asplit=2[cav][cak]")
         g.append("[bgr][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
         voice, beds = "cav", ["[bgd]"]

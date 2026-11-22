@@ -39,6 +39,19 @@ def test_render_picks_video_not_info_json():
     assert media_info(r["out"])["height"] == 1920
 
 
+def test_bgm_offset_and_switch_at_peak():
+    wd = tempfile.mkdtemp()
+    _vod(os.path.join(wd, "source.mp4"), 20, audio=None)
+    a, b = os.path.join(wd, "calm.wav"), os.path.join(wd, "hype.wav")
+    _ff("-f", "lavfi", "-i", "sine=f=440:d=30", a)
+    _ff("-f", "lavfi", "-i", "sine=f=880:d=30", b)
+    r = render_clip(wd, {"id": "e", "format": "short", "start": 1, "end": 17, "trim_silence": False, "subs": [],
+                         "bgm": a, "bgm_offset": 5, "bgm_switch": {"at": 10, "bgm": b, "offset": 3}},
+                    style(), glossary(), os.path.join(wd, "out", "e.mp4"), [])
+    info = media_info(r["out"])
+    assert info["has_audio"] and abs(info["duration"] - 16) < 0.5
+
+
 def test_silent_and_no_audio_sources_render():
     wd = tempfile.mkdtemp()
     _vod(os.path.join(wd, "source.mp4"), 20, audio=None)
