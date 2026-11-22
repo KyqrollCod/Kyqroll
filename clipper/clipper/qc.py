@@ -126,6 +126,9 @@ def check(path, fmt, st, ass_path=None, sheet_path=None, asr_model=None, opening
         add("duration", cfg["min_sec"] <= d <= cfg["max_sec"], f"{d:.1f}秒（{cfg['min_sec']}〜{cfg['max_sec']}）")
     else:
         add("duration", d >= cfg["min_sec"], f"{d:.1f}秒（{cfg['min_sec']}秒以上）")
+        # Owner 2026-11-22: about 10 minutes is the floor to aim for (a guide, so a warning only).
+        tgt = cfg.get("target_min_sec", 600)
+        add("duration_target", d >= tgt, f"{d / 60:.1f}分（目安 {tgt // 60}分以上）", hard=False)
 
     err = run([need("ffmpeg"), "-hide_banner", "-nostats", "-i", path,
                "-filter_complex", "[0:a]ebur128=peak=true[a];[0:v]blackdetect=d=0.2:pix_th=0.06,"
