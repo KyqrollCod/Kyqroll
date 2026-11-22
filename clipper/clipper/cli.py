@@ -478,6 +478,41 @@ def cmd_prepare(a):
     return ok
 
 
+def cmd_serve(a):
+    """The local site (http://localhost:8765/). tasks.html is rebuilt on every request and the
+    video list at most once a minute, so the pages are always current without a separate job."""
+    import functools
+    import http.server
+    import time as _t
+    from .common import default_work_root
+    from .site import write_index, write_tasks
+    root = default_work_root()
+    last = {"index": 0.0}
+
+    class H(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            p = self.path.split("?")[0]
+            try:
+                if p in ("/", "/tasks.html"):
+                    write_tasks(root)
+                    if p == "/":
+                        self.path = "/tasks.html"
+                elif p == "/index.html" and _t.time() - last["index"] > 60:
+                    write_index(root)
+                    last["index"] = _t.time()
+            except Exception as e:  # noqa: BLE001 — a page error must never take the site down
+                print(f"ページ生成エラー: {e}", flush=True)
+            return super().do_GET()
+
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    srv = http.server.ThreadingHTTPServer((a.host, a.port), functools.partial(H, directory=root))
+    print(f"サイト: http://localhost:{a.port}/ （{root}）", flush=True)
+    srv.serve_forever()
+
+
 def cmd_ready(a):
     from .site import write_ready
     wd = work_dir(a.work)
@@ -573,6 +608,10 @@ def main(argv=None):
     s = sub.add_parser("site", help="一覧ページ・動画ページ・delivery.md を作り直す（省略時は全動画）")
     s.add_argument("work", nargs="?", default=None)
     s.set_defaults(f=cmd_site)
+    s = sub.add_parser("serve", help="ローカルのサイトを開く（動いているタスク・動画一覧・曲リスト）")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1")
+    s.set_defaults(f=cmd_serve)
     s = sub.add_parser("ready", help="全クリップ合格なら out/ready.json を書き、投稿側へ渡す")
     s.add_argument("work")
     s.set_defaults(f=cmd_ready)

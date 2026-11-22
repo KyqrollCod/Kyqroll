@@ -67,7 +67,8 @@ body.has-side header,body.has-side main{margin-left:0}}
 pre.code{background:#11141a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12px}
 """
 
-NAV = [("index.html", "動画一覧"), ("music.html", "曲リスト"), ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順")]
+NAV = [("tasks.html", "動いているタスク"), ("index.html", "動画一覧"), ("music.html", "曲リスト"),
+       ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順")]
 
 
 def _nav(active):
@@ -369,6 +370,139 @@ def write_index(root):
         fh.write(_page("切り抜き制作", head, body))
     write_music(root)
     return os.path.join(root, "index.html")
+
+
+def _lj(p, default=None):
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return default
+
+
+def _age(p):
+    try:
+        return time.time() - os.path.getmtime(p)
+    except OSError:
+        return None
+
+
+def _ago(sec):
+    if sec is None:
+        return "—"
+    sec = int(sec)
+    return f"{sec}秒前" if sec < 60 else (f"{sec // 60}分前" if sec < 3600 else f"{sec // 3600}時間前")
+
+
+def _gpu_busy():
+    import tempfile
+    path = os.path.join(tempfile.gettempdir(), "clipper_gpu.lock")
+    if not os.path.exists(path):
+        return False
+    try:
+        fh = open(path, "a+")
+    except OSError:
+        return True
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        return False
+    except OSError:
+        return True
+    finally:
+        fh.close()
+
+
+def write_tasks(root):
+    """One page for "what is running right now" plus where every stream is in the flow
+    (prepare → edit → qc → ready → scheduled). Rebuilt on every request by `clipper serve`."""
+    now = time.time()
+    running, board = [], []
+    plog = os.path.join(root, "prepare.log")
+    pa = _age(plog)
+    if pa is not None and pa < 600:
+        last = ""
+        try:
+            with open(plog, encoding="utf-8", errors="replace") as fh:
+                lines = [ln.strip() for ln in fh.readlines()[-30:] if ln.strip() and "Deprecated" not in ln]
+            cur = next((ln for ln in reversed(lines) if ln.startswith("==")), "")
+            last = (cur + " ／ " if cur else "") + (lines[-1] if lines else "")
+        except OSError:
+            pass
+        running.append(("過去配信の準備（取得・文字起こし）", last, _ago(pa), "/prepare.log"))
+    if _gpu_busy():
+        running.append(("GPU 使用中", "文字起こし・声の分離・品質チェックの聞き取りのどれかが動いています", "いま", ""))
+    for note in (_lj(os.path.join(root, "_状況", "作業中.json"), {}) or {}).get("tasks", []):
+        running.append((note.get("who", "作業"), note.get("what", ""), note.get("since", ""), note.get("link", "")))
+    rec = _lj(os.path.join(root, "_投稿", "投稿記録.json"), {}) or {}
+    ra = _age(os.path.join(root, "_投稿", "投稿記録.json"))
+    if ra is not None and ra < 1800:
+        running.append(("YouTube 予約投稿（投稿担当）", f"記録済み {len(rec.get('videos') or [])}本", _ago(ra), "/_投稿/"))
+    holds = (_lj(os.path.join(root, "_投稿", "hold.json"), {}) or {}).get("hold", [])
+    published = {}
+    for v in rec.get("videos") or []:
+        published.setdefault(v.get("stream"), []).append(v)
+    for n in sorted(os.listdir(root), reverse=True):
+        wd = os.path.join(root, n)
+        if not os.path.isdir(wd) or n.startswith("_") or not os.path.exists(os.path.join(wd, "meta.json")):
+            continue
+        meta = _lj(os.path.join(wd, "meta.json"), {}) or {}
+        prog = _lj(os.path.join(wd, "progress.json"))
+        pg = _age(os.path.join(wd, "progress.json"))
+        if prog and not prog.get("result") and pg is not None and pg < 900:
+            step = next((s for s in prog.get("steps", []) if s.get("state") == "run"), {})
+            running.append((f"{prog.get('title') or n}", f"{step.get('label', '')} ／ 全体 {int(prog.get('overall', 0) * 100)}%",
+                            _ago(pg), f"/{_u(n)}/progress.html"))
+        qc = _lj(os.path.join(wd, "out", "qc.json"), []) or []
+        passed = sum(1 for r in qc if r.get("pass"))
+        ready = os.path.exists(os.path.join(wd, "out", "ready.json"))
+        pub = published.get(n, [])
+        held = any(n.startswith(h.get("stream_prefix", "~")) for h in holds)
+        if not os.path.exists(os.path.join(wd, "transcript.json")):
+            stage, cls = "準備中", "warn"
+        elif not os.path.exists(os.path.join(wd, "clips.src.yaml")):
+            stage, cls = "編集待ち", ""
+        elif not ready:
+            stage, cls = ("編集中" if passed < len(qc) or not qc else "確認待ち"), "warn"
+        elif held:
+            stage, cls = "投稿保留", "ng"
+        elif pub:
+            stage, cls = f"予約済み {len(pub)}本", "ok"
+        else:
+            stage, cls = "投稿待ち", "ok"
+        nxt = min((v.get("scheduled_at", "") for v in pub if v.get("scheduled_at")), default="")
+        board.append(f"<tr><td>{_e(meta.get('upload_date', ''))}</td><td><a href='/{_u(n)}/index.html'>{_e(meta.get('title') or n)}</a></td>"
+                     f"<td><span class='tag {cls}'>{_e(stage)}</span></td><td>{passed}/{len(qc)}</td>"
+                     f"<td>{_e(nxt[5:16].replace('T', ' ') if nxt else '—')}</td></tr>")
+    run_html = "".join(f"<div class='card' style='padding:10px 14px;margin-bottom:8px'><div class='row'><b>{_e(a)}</b>"
+                       f"<span class='crumb'>{_e(c)}</span>" + (f"<a href='{_e(d)}'>詳細</a>" if d else "") +
+                       f"</div><div class='crumb'>{_e(b)}</div></div>" for a, b, c, d in running) \
+        or "<p class='empty'>いま動いている処理はありません。</p>"
+    queue = _lj(os.path.join(root, "_投稿", "queue.json"), []) or []
+    done_ids = {(v.get("stream"), v.get("clip")) for v in rec.get("videos") or []}
+    soon = sorted([q for q in queue if q.get("scheduled_at")], key=lambda q: q["scheduled_at"])[:20]
+    q_html = "".join(f"<tr><td>{_e(q['scheduled_at'][5:16].replace('T', ' '))}</td><td>{'ショート' if q.get('format') == 'short' else '横型'}</td>"
+                     f"<td>{_e(q.get('title'))}</td><td><span class='tag {'ok' if (q.get('stream'), q.get('clip')) in done_ids else ''}'>"
+                     f"{'予約済み' if (q.get('stream'), q.get('clip')) in done_ids else '予定'}</span></td></tr>" for q in soon)
+    hold_html = "".join(f"<div class='banner'>保留: {_e(h.get('stream_prefix'))} — {_e(h.get('reason'))}</div>" for h in holds)
+    body = (f"<h2>いま動いている処理</h2>{run_html}{hold_html}"
+            "<h2>配信ごとの段階（準備 → 編集 → 品質チェック → 投稿待ち → 予約）</h2>"
+            "<table class='tbl'><tr><th>配信日</th><th>配信</th><th>段階</th><th>合格</th><th>最初の公開予定</th></tr>"
+            + "".join(board) + "</table>"
+            + (f"<h2>予約投稿の予定（早い順）</h2><table class='tbl'><tr><th>公開日時</th><th>形式</th><th>タイトル</th><th>状態</th></tr>{q_html}</table>"
+               if q_html else ""))
+    head = f"<h1>動いているタスク</h1><span class='crumb'>{time.strftime('%H:%M:%S')} 時点・10秒ごとに自動更新</span>"
+    css = ("<style>.tbl{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line)}"
+           ".tbl td,.tbl th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}"
+           ".tbl th{color:var(--sub);font-weight:600}</style>")
+    out = os.path.join(root, "tasks.html")
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(_page("動いているタスク", head, css + body, refresh=10, active="tasks.html"))
+    return out
 
 
 def write_music(root):

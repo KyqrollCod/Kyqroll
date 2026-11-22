@@ -347,25 +347,25 @@ def render_clip(wd, clip, st, gl, out_path, words):
         x = 0.4
         inputs += ["-stream_loop", "-1", "-ss", f"{float(clip.get('bgm_offset', 0)):.3f}", "-i", _bgm_file(bgm)]
         end1 = (t_sw + x) if t_sw is not None else dur
-        g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
+        g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=N/SR/TB,"
                  f"volume={db}dB,atrim=duration={end1:.3f},"
                  f"afade=t=in:d=0.6,afade=t=out:st={max(0.0, end1 - (x if t_sw is not None else 1.2)):.3f}"
-                 f":d={x if t_sw is not None else 1.2}[bg1]")
+                 f":d={x if t_sw is not None else 1.2}[bgmA]")
         idx += 1
         if t_sw is not None:
             inputs += ["-stream_loop", "-1", "-ss", f"{float(sw.get('offset', 0)):.3f}", "-i", _bgm_file(sw["bgm"])]
             db2 = float(sw.get("db", float(clip.get('bgm_db', cfg.get('bgm_db', -22))))) + _gain(sw["bgm"])
-            g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
+            g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=N/SR/TB,"
                      f"volume={db2}dB,atrim=duration={dur - t_sw:.3f},"
                      f"afade=t=in:d={x},afade=t=out:st={max(0.0, dur - t_sw - 1.2):.3f}:d=1.2,"
-                     f"adelay={int(t_sw * 1000)}:all=1[bg2]")
-            g.append("[bg1][bg2]amix=inputs=2:normalize=0:duration=longest[bgr]")
+                     f"adelay={int(t_sw * 1000)}:all=1[bgmB]")
+            g.append("[bgmA][bgmB]amix=inputs=2:normalize=0:duration=longest[bgmX]")
             idx += 1
         else:
-            g.append("[bg1]anull[bgr]")
+            g.append("[bgmA]anull[bgmX]")
         idx -= 1   # the shared `idx += 1` below accounts for the last BGM input
         g.append("[ca2]asplit=2[cav][cak]")
-        g.append("[bgr][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
+        g.append("[bgmX][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
         voice, beds = "cav", ["[bgd]"]
         idx += 1
     if se_labels or beds:

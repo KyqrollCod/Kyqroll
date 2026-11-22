@@ -43,13 +43,25 @@ def test_bgm_offset_and_switch_at_peak():
     wd = tempfile.mkdtemp()
     _vod(os.path.join(wd, "source.mp4"), 20, audio=None)
     a, b = os.path.join(wd, "calm.wav"), os.path.join(wd, "hype.wav")
-    _ff("-f", "lavfi", "-i", "sine=f=440:d=30", a)
+    # A short first track that has to loop: its timestamps restart at every loop, which once let
+    # it keep playing under the second track (two BGMs at once).
+    _ff("-f", "lavfi", "-i", "sine=f=440:d=4", a)
     _ff("-f", "lavfi", "-i", "sine=f=880:d=30", b)
     r = render_clip(wd, {"id": "e", "format": "short", "start": 1, "end": 17, "trim_silence": False, "subs": [],
-                         "bgm": a, "bgm_offset": 5, "bgm_switch": {"at": 10, "bgm": b, "offset": 3}},
+                         "bgm": a, "bgm_offset": 2, "bgm_switch": {"at": 10, "bgm": b, "offset": 3}},
                     style(), glossary(), os.path.join(wd, "out", "e.mp4"), [])
     info = media_info(r["out"])
     assert info["has_audio"] and abs(info["duration"] - 16) < 0.5
+    import numpy as np
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", r["out"], "-ac", "1", "-ar", "8000", "-f", "f32le", "-"],
+                         capture_output=True).stdout
+    x = np.frombuffer(pcm, np.float32)
+
+    def level(t, hz):
+        spec = np.abs(np.fft.rfft(x[int(t * 8000):int(t * 8000) + 8000]))
+        return spec[hz - 10:hz + 10].max()
+    assert level(5, 440) > 10 * level(5, 880)      # before the switch: only the first track
+    assert level(12, 880) > 10 * level(12, 440)    # after it (output 9 s): only the second
 
 
 def test_silent_and_no_audio_sources_render():
