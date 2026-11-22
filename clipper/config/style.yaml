@@ -11,6 +11,7 @@ encode:
   encoder: libx264        # NVIDIA GPU なら h264_nvenc
   crf: 18
   preset: slow
+  maxrate: 8M             # 上限ビットレート（動きの激しいゲームで巨大化しないように。YouTube 1080p60 推奨は 12M 以下）
   audio_bitrate: 192k
 
 short:

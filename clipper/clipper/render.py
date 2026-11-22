@@ -14,6 +14,16 @@ from .subs import auto_lines, build_ass
 from .timeline import Mapper, cut_silences, drop_ranges, keep_ranges
 
 
+def _vbv(enc):
+    """Cap the bitrate so fast-moving games (CoD at 60 fps) don't come out 10x larger than calm ones."""
+    mr = str(enc.get("maxrate") or "")
+    if not mr:
+        return []
+    unit = {"k": 1_000, "m": 1_000_000}.get(mr[-1:].lower(), 1)
+    num = float(mr.rstrip("MmKk")) * unit
+    return ["-maxrate", mr, "-bufsize", str(int(num * 2))]
+
+
 def _asset(path, kind):
     if os.path.isabs(path) and os.path.exists(path):
         return path
@@ -384,7 +394,7 @@ def render_clip(wd, clip, st, gl, out_path, words):
     enc = st["encode"]
     venc = ["-c:v", enc["encoder"]]
     if enc["encoder"] == "libx264":
-        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), "-profile:v", "high",
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), "-profile:v", "high", *_vbv(enc),
                  "-threads", str(max(2, (os.cpu_count() or 8) // 2))]   # leave half the CPU to the rest of the PC
     else:
         venc += ["-preset", "p6", "-cq", str(enc["crf"]), "-b:v", "0"]
@@ -535,7 +545,7 @@ def add_opening(main_path, report, intro, out_path, st, teaser=True):
     tmp_out = out_path + ".tmp.mp4"
     venc = ["-c:v", enc["encoder"]]
     if enc["encoder"] == "libx264":
-        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]),
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), *_vbv(enc),
                  "-threads", str(max(2, (os.cpu_count() or 8) // 2))]
     run([need("ffmpeg"), "-y", "-hide_banner", *inputs, "-filter_complex", ";".join(g), "-map", "[v]", "-map", "[a]",
          *venc, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", tmp_out])
