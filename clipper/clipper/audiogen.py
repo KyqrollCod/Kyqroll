@@ -182,9 +182,25 @@ def se_path(name):
     return p
 
 
+def music_catalog():
+    """The music list kept with the work folders (<work_root>/_素材/BGM/曲リスト.yaml): {key: song}."""
+    from .common import default_work_root, load_yaml
+    p = os.path.join(default_work_root(), "_素材", "BGM", "曲リスト.yaml")
+    if not os.path.exists(p):
+        return {}
+    songs = (load_yaml(p) or {}).get("songs") or []
+    return {s["key"]: s for s in songs if s.get("key")}
+
+
 def bgm_path(name):
+    """A built-in BGM (comical, tension) or a song key from the music list."""
+    if name not in _BGM:
+        song = music_catalog().get(name)
+        if song:
+            return song["file"]
+        raise ValueError(f"BGM「{name}」がありません（comical / tension か、曲リスト.yaml の key を指定）")
     p = os.path.join(BGM_DIR, f"{name}.wav")
-    if not os.path.exists(p) and name in _BGM:
+    if not os.path.exists(p):
         _write(p, _BGM[name]())
     return p
 

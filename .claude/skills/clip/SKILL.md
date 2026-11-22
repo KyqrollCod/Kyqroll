@@ -75,6 +75,14 @@ or qc and point them to http://localhost:8765/.
   there are no licenses to check. BGM is `comical` or `tension`, looped and ducked under the voice
   by a sidechain. Auto SE: emph → pop, zoom → whoosh, keep → impact, chat TTS → a ding just
   before it.
+- Music list (2026-11-22): `<work_root>/_素材/BGM/曲リスト.yaml` is the single source for downloaded
+  songs (OpenTracks, ex DOVA-SYNDROME, license checked per composer). Use `bgm: <key>`. Songs are
+  evened out by `gain_db`. Use `bgm_offset` to start at the hook and `bgm_switch: {at, bgm, offset}`
+  to cross to another song at the peak. `python -m clipper site` writes music.html and
+  曲リスト.md; every added song must be added to the yaml. Every page has a sidebar (動画一覧 /
+  曲リスト / 投稿の記録 / 編集手順).
+- Publishing handoff: `python -m clipper ready <wd>` writes out/ready.json only when every clip
+  passed qc. The upload session records uploads in out/published.json.
 - Long videos open with up to 3 punchlines (≤8 s), then the channel intro (`long_intro` in
   config/local.yaml), then the main video. The joined video is re-normalized and limited. The qc
   ASS is shifted by the opening, and qc ignores black frames inside the opening.

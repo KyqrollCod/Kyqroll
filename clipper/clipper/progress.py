@@ -132,7 +132,7 @@ class Progress:
                 f"<tr class='{s['state']}'><td>{icon[s['state']]}</td><td>{html.escape(s['label'])}</td>"
                 f"<td><div class='bar'><i style='width:{pct}%'></i></div></td><td>{pct}%</td>"
                 f"<td>{word[s['state']]}</td><td>{took}</td><td>{html.escape(s['note'])}</td></tr>")
-        from .site import CSS
+        from .site import CSS, _nav
         if d["result"]:
             ok = d["result"][0] == "ok"
             head = (f"<span class='tag {'ok' if ok else 'ng'}'>{'完了' if ok else '停止'}</span> "
@@ -151,7 +151,7 @@ td:last-child{white-space:normal;color:var(--sub);font-size:12px}tr.run td{backg
 .top{font-size:16px}@media(max-width:600px){td:nth-child(6),td:nth-child(7){display:none}td{padding:7px 6px}}"""
         return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">{refresh}
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>進捗 {html.escape(self.title)}</title>
-<style>{CSS}{extra}</style></head><body>
+<style>{CSS}{extra}</style></head><body class="has-side">{_nav("")}
 <header><a class="crumb" href="../index.html">← 一覧</a><a class="crumb" href="index.html">動画ページ</a>
 <h1>{html.escape(self.title)}</h1><span class="crumb">最終更新 {d['updated']}・経過 {_fmt(el)}・3秒ごとに自動更新</span></header>
 <main><div class="top">{head}</div><div class="bar big" style="min-width:0"><i style="width:{int(d['overall'] * 100)}%"></i></div>

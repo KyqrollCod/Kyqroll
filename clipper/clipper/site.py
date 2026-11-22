@@ -48,7 +48,31 @@ border-radius:6px;padding:2px 8px;cursor:pointer}.copy:hover{border-color:var(--
 h2{font-size:15px;margin:26px 0 10px;color:var(--sub);font-weight:600}
 .vcard{display:flex;gap:14px;padding:12px;align-items:center}.vcard img{width:220px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#000}
 .empty{color:var(--sub)}
+nav.side{position:fixed;left:0;top:0;bottom:0;width:176px;background:#12151b;border-right:1px solid var(--line);
+padding:16px 10px;display:flex;flex-direction:column;gap:4px;z-index:6}
+nav.side .brand{font-weight:700;font-size:14px;padding:4px 10px 12px;color:var(--text)}
+nav.side a{display:block;padding:8px 10px;border-radius:8px;color:var(--sub);font-size:13px}
+nav.side a:hover{background:#1b2029;color:var(--text);text-decoration:none}
+nav.side a.on{background:#1d2a38;color:var(--text);border-left:3px solid var(--accent)}
+body.has-side header,body.has-side main{margin-left:176px}
+@media (max-width:860px){nav.side{position:sticky;bottom:auto;width:auto;flex-direction:row;overflow-x:auto;padding:6px 10px;
+border-right:0;border-bottom:1px solid var(--line)}nav.side .brand{display:none}nav.side a{white-space:nowrap}
+body.has-side header,body.has-side main{margin-left:0}}
+.song{display:grid;grid-template-columns:1fr auto;gap:6px 14px;padding:12px 14px}
+.song audio{width:100%;height:32px}.song .k{font-family:Consolas,monospace;color:var(--accent)}
+.sit{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+.sit>.h{padding:12px 14px;border-bottom:1px solid var(--line);background:#151922}
+.sit>.h b{font-size:15px}.sit>.h div{color:var(--sub);font-size:13px}
+.song+.song{border-top:1px solid var(--line)}
+pre.code{background:#11141a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12px}
 """
+
+NAV = [("index.html", "動画一覧"), ("music.html", "曲リスト"), ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順")]
+
+
+def _nav(active):
+    links = "".join(f"<a class='{'on' if href == active else ''}' href='/{_u(href)}'>{_e(label)}</a>" for href, label in NAV)
+    return f"<nav class='side'><div class='brand'>切り抜き制作</div>{links}</nav>"
 
 JS = """<script>
 function cp(btn){const t=btn.parentElement.querySelector('.v').innerText;
@@ -66,11 +90,12 @@ def _u(path):
     return quote(path.replace("\\", "/"))
 
 
-def _page(title, head_html, body_html, refresh=None):
+def _page(title, head_html, body_html, refresh=None, active="index.html"):
     r = f"<meta http-equiv='refresh' content='{refresh}'>" if refresh else ""
     return (f"<!doctype html><html lang='ja'><head><meta charset='utf-8'>{r}"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{_e(title)}</title>"
-            f"<style>{CSS}</style></head><body><header>{head_html}</header><main>{body_html}</main>{JS}</body></html>")
+            f"<style>{CSS}</style></head><body class='has-side'>{_nav(active)}<header>{head_html}</header>"
+            f"<main>{body_html}</main>{JS}</body></html>")
 
 
 def _spec(wd):
@@ -342,7 +367,88 @@ def write_index(root):
     head = "<h1>切り抜き制作</h1><span class='crumb'>動画ごとのフォルダ一覧</span>"
     with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(_page("切り抜き制作", head, body))
+    write_music(root)
     return os.path.join(root, "index.html")
+
+
+def write_music(root):
+    """The music list: <root>/_素材/BGM/曲リスト.yaml (the single source) → music.html and 曲リスト.md.
+    Songs are grouped by the situation they fit, each with a player, its key for clips.src.yaml,
+    the point where it gets going, and its license."""
+    src = os.path.join(root, "_素材", "BGM", "曲リスト.yaml")
+    if not os.path.exists(src):
+        return None
+    doc = load_yaml(src) or {}
+    sits, songs, reqs = doc.get("situations") or [], doc.get("songs") or [], doc.get("requests") or []
+    by = {}
+    for s in songs:
+        by.setdefault(s.get("situation"), []).append(s)
+
+    def rel(p):
+        p = str(p).replace("\\", "/")
+        r = root.replace("\\", "/").rstrip("/") + "/"
+        return "/" + _u(p[len(r):]) if p.startswith(r) else ""
+
+    def sec(v):
+        return f"{int(v) // 60}:{int(v) % 60:02d}" if v is not None else "—"
+    parts = ["<div class='banner'>編集で使ってよい曲の一覧です（場面ごと）。<b>key</b> を clips.src.yaml の "
+             "<code>bgm:</code> や <code>bgm_switch: {bgm: …}</code> に書くと使えます。音量は曲ごとに自動でそろいます。"
+             "曲を足したら <code>_素材/BGM/曲リスト.yaml</code> に追記し、<code>python -m clipper site</code> で"
+             "このページと 曲リスト.md を作り直します（追記は義務）。</div>",
+             "<pre class='code'>bgm: chill_223am            # 土台の曲（key）\nbgm_offset: 12              # 曲の盛り上がり位置から始める（秒）\n"
+             "bgm_switch: {at: 5123.4, bgm: dotabata_party}   # 山場（元配信の秒）から切り替え</pre>"]
+    md = ["# 曲リスト（場面別）", "",
+          "編集で使ってよい曲の一覧。ここは `曲リスト.yaml` から自動生成される（直接編集しない）。",
+          "曲を足したら `曲リスト.yaml` に追記して `python -m clipper site` を実行する（追記は義務）。", "",
+          "使い方: clips.src.yaml に `bgm: <key>`、山場で切り替えるなら `bgm_switch: {at: <元配信の秒>, bgm: <key>}`、"
+          "曲の盛り上がりから始めるなら `bgm_offset: <秒>`。", ""]
+    for st in sits:
+        lst = by.get(st["key"], [])
+        parts.append(f"<section class='sit' id='{_e(st['key'])}'><div class='h'><b>{_e(st['name'])}</b>"
+                     f"<div>{_e(st.get('when'))}</div><div>使いどころ: {_e(st.get('use'))}</div></div>")
+        md += [f"## {st['name']}", "", f"- 場面: {st.get('when')}", f"- 使いどころ: {st.get('use')}", "",
+               "| key | 曲名 / 作曲 | 向いている場面 | 盛り上がり | 長さ | メモ |", "|---|---|---|---|---|---|"]
+        for s in lst:
+            a = rel(s.get("file", ""))
+            hook = s.get("hook_sec")
+            parts.append(
+                f"<div class='song'><div><div class='row'><span class='title'>{_e(s['title'])}</span>"
+                f"<span class='crumb'>{_e(s.get('artist'))}</span>"
+                f"<span class='tag k' title='clips.src.yaml に書く名前'>{_e(s['key'])}</span></div>"
+                f"<div>{_e(s.get('scenes'))}</div><div class='crumb'>{_e(s.get('note'))}</div>"
+                f"<div class='links'><span>盛り上がり {sec(hook)}</span><span>長さ {sec(s.get('duration'))}</span>"
+                f"<span>音量補正 {s.get('gain_db', 0):+}dB</span><a href='{_e(s.get('page'))}' target='_blank'>配布ページ</a>"
+                f"<span>{_e(s.get('license'))}</span></div></div>"
+                f"<div style='min-width:260px'>" + (f"<audio controls preload='none' src='{a}'></audio>" if a else "") +
+                (f"<button class='copy' style='position:static' onclick=\"const au=this.parentElement.querySelector('audio');"
+                 f"au.currentTime={hook};au.play()\">盛り上がりから再生</button>" if a and hook else "") + "</div></div>")
+            md.append(f"| `{s['key']}` | {s['title']} / {s.get('artist')} | {s.get('scenes')} | {sec(hook)} | "
+                      f"{sec(s.get('duration'))} | {s.get('note')} |")
+        if not lst:
+            parts.append("<div class='song empty'>まだ曲がありません</div>")
+        parts.append("</section>")
+        md.append("")
+    if reqs:
+        parts.append("<h2>オーナーに音源提供を依頼中の曲</h2><div class='sit'>" + "".join(
+            f"<div class='song'><div><div class='row'><span class='title'>{_e(r['title'])}</span>"
+            f"<span class='crumb'>{_e(r.get('artist'))}</span></div><div>{_e(r.get('scenes'))}</div>"
+            f"<div class='crumb'>{_e(r.get('why'))}</div></div><div class='tag warn'>{_e(r.get('status'))}</div></div>"
+            for r in reqs) + "</div>")
+        md += ["## オーナーに音源提供を依頼中の曲", "", "| 曲名 | アーティスト | 使いたい場面 | 状況 |", "|---|---|---|---|"]
+        md += [f"| {r['title']} | {r.get('artist')} | {r.get('scenes')} | {r.get('status')} |" for r in reqs]
+        md.append("")
+    md += ["## 方針", "",
+           "- 曲は配布元の利用条件を確認してから使う（作曲者ごとの追加条件は 曲リスト.yaml の artist_terms）。",
+           "- ショートの権利もの楽曲は、作曲者が明確に禁止していない限り使ってよい（オーナー判断 2026-11-22。"
+           "Content ID の申し立ては収益が権利者に回る扱いとして許容）。申し立ての結果は投稿担当が published.json に記録する。",
+           "- Claude が入手できない曲はオーナーに依頼する（上の表）。届いた音源は files/ に置き、曲リスト.yaml に追記する。", ""]
+    with open(os.path.join(root, "_素材", "BGM", "曲リスト.md"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(md))
+    head = f"<h1>曲リスト</h1><span class='crumb'>{len(songs)}曲・場面別（{_e(doc.get('updated', ''))} 更新）</span>"
+    out = os.path.join(root, "music.html")
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(_page("曲リスト", head, "".join(parts), active="music.html"))
+    return out
 
 
 def refresh(wd):

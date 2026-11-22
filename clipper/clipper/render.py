@@ -325,9 +325,15 @@ def render_clip(wd, clip, st, gl, out_path, words):
     if bgm and str(bgm).lower() != "none":
         from .audiogen import bgm_path
 
+        from .audiogen import music_catalog
+        cat = music_catalog()
+
         def _bgm_file(name):
             return name if os.path.isabs(str(name)) else bgm_path(str(name))
-        db = float(clip.get('bgm_db', cfg.get('bgm_db', -22)))
+
+        def _gain(name):   # songs from the music list are evened out to the built-in BGM's loudness
+            return float((cat.get(str(name)) or {}).get("gain_db") or 0.0)
+        db = float(clip.get('bgm_db', cfg.get('bgm_db', -22))) + _gain(bgm)
         # bgm_offset: start the track this many seconds in (a song's hook, not its intro).
         # bgm_switch {at: <source sec>, bgm, offset}: cross to a second track at the peak (転),
         # e.g. comical build-up → tension/hype from the moment things blow up.
@@ -345,7 +351,7 @@ def render_clip(wd, clip, st, gl, out_path, words):
         idx += 1
         if t_sw is not None:
             inputs += ["-stream_loop", "-1", "-ss", f"{float(sw.get('offset', 0)):.3f}", "-i", _bgm_file(sw["bgm"])]
-            db2 = float(sw.get("db", db))
+            db2 = float(sw.get("db", float(clip.get('bgm_db', cfg.get('bgm_db', -22))))) + _gain(sw["bgm"])
             g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
                      f"volume={db2}dB,atrim=duration={dur - t_sw:.3f},"
                      f"afade=t=in:d={x},afade=t=out:st={max(0.0, dur - t_sw - 1.2):.3f}:d=1.2,"
