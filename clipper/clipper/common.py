@@ -119,14 +119,66 @@ def need(binary):
     return path
 
 
+FFMPEG_MAX_GB = float(os.environ.get("CLIPPER_FFMPEG_MAX_GB", "12"))
+
+
+def _memory_cap(pid, gb):
+    """Windows: put the process in a job object with a per-process memory limit, so a runaway
+    filter graph fails on its own instead of paging the whole PC to a halt (owner, 2026-11-22)."""
+    if os.name != "nt" or gb <= 0:
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class _IO(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_ulonglong) for n in ("r", "w", "o", "rb", "wb", "ob")]
+
+    class _BASIC(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+    class _EXT(ctypes.Structure):
+        _fields_ = [("Basic", _BASIC), ("Io", _IO), ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    job = k32.CreateJobObjectW(None, None)
+    info = _EXT()
+    info.Basic.LimitFlags = 0x100   # JOB_OBJECT_LIMIT_PROCESS_MEMORY
+    info.ProcessMemoryLimit = int(gb * 1024 ** 3)
+    k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))
+    h = k32.OpenProcess(0x0100 | 0x0001, False, pid)   # SET_QUOTA | TERMINATE
+    if h:
+        k32.AssignProcessToJobObject(job, h)
+        k32.CloseHandle(h)
+    return job   # keep the handle alive while the process runs
+
+
 def run(cmd, cwd=None, capture=False):
-    """Run a command, raising with its stderr tail on failure."""
-    p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
-                       stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
-    if p.returncode != 0:
-        tail = "\n".join(p.stderr.strip().splitlines()[-25:])
-        raise RuntimeError(f"command failed ({p.returncode}): {' '.join(map(str, cmd[:6]))} ...\n{tail}")
-    return p.stdout if capture else p.stderr
+    """Run a command, raising with its stderr tail on failure. ffmpeg runs at below-normal priority
+    with a memory cap (FFMPEG_MAX_GB) so encoding never starves the rest of the PC."""
+    is_ff = os.path.basename(str(cmd[0])).lower().startswith("ffmpeg")
+    flags = 0x00004000 if (os.name == "nt" and is_ff) else 0   # BELOW_NORMAL_PRIORITY_CLASS
+    p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+                         stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", creationflags=flags)
+    job = _memory_cap(p.pid, FFMPEG_MAX_GB) if is_ff else None
+    out, err = p.communicate()
+    del job
+    # ffmpeg treats an allocation failure in a demuxer as end of input and still exits 0, which
+    # would leave a silently truncated video: count it as a failure.
+    oom = is_ff and "Cannot allocate memory" in (err or "")
+    if p.returncode != 0 or oom:
+        tail = "\n".join(err.strip().splitlines()[-25:])
+        hint = (f"\n（ffmpeg のメモリ上限 {FFMPEG_MAX_GB:g}GB に達した可能性があります）"
+                if is_ff and ("Cannot allocate memory" in err or "out of memory" in err.lower()) else "")
+        raise RuntimeError(f"command failed ({p.returncode}): {' '.join(map(str, cmd[:6]))} ...\n{tail}{hint}")
+    return out if capture else err
 
 
 _FF_MAJOR = None

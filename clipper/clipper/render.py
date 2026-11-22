@@ -383,7 +383,8 @@ def render_clip(wd, clip, st, gl, out_path, words):
     enc = st["encode"]
     venc = ["-c:v", enc["encoder"]]
     if enc["encoder"] == "libx264":
-        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), "-profile:v", "high"]
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), "-profile:v", "high",
+                 "-threads", str(max(2, (os.cpu_count() or 8) // 2))]   # leave half the CPU to the rest of the PC
     else:
         venc += ["-preset", "p6", "-cq", str(enc["crf"]), "-b:v", "0"]
     stage1 = os.path.join(tmp, "stage1.mp4")
@@ -502,32 +503,39 @@ def add_opening(main_path, report, intro, out_path, st, teaser=True):
     by the opening length so the speech/telop check still lines up."""
     enc = st["encode"]
     spans = pick_teaser(report) if teaser else []
-    inputs = ["-i", main_path]
-    g, parts = [], []
+    # Every teaser span and the main video are separate, input-seeked inputs. Trimming them all
+    # from one input made ffmpeg hold every decoded frame up to the latest teaser span in memory
+    # (tens of GB for a span 6-7 minutes in), which stalled the whole PC.
+    inputs, g, parts = [], [], []
     for k, (a, b) in enumerate(spans):
-        g.append(f"[0:v]trim=start={a}:end={b},setpts=PTS-STARTPTS,fps=60,format=yuv420p,setsar=1[tv{k}]")
-        g.append(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,afade=t=in:d=0.05,"
+        inputs += ["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", main_path]
+        g.append(f"[{k}:v]setpts=PTS-STARTPTS,fps=60,format=yuv420p,setsar=1[tv{k}]")
+        g.append(f"[{k}:a]asetpts=PTS-STARTPTS,afade=t=in:d=0.05,"
                  f"afade=t=out:st={max(0.0, b - a - 0.12):.3f}:d=0.12[ta{k}]")
         parts.append(f"[tv{k}][ta{k}]")
     opening = sum(b - a for a, b in spans)
     if intro and os.path.exists(intro):
+        n = len(spans)
         inputs += ["-i", intro]
-        g.append("[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
+        g.append(f"[{n}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
                  "fps=60,format=yuv420p,setsar=1[iv]")
-        g.append(f"[1:a]aresample=48000,aformat=channel_layouts=stereo,loudnorm=I={st['audio']['lufs']}:"
+        g.append(f"[{n}:a]aresample=48000,aformat=channel_layouts=stereo,loudnorm=I={st['audio']['lufs']}:"
                  f"TP={st['audio']['true_peak']}[ia]")
         parts.append("[iv][ia]")
         opening += media_info(intro)["duration"]
     if not parts:
         return None
-    g.append("[0:v]fps=60,format=yuv420p,setsar=1[mv]")
-    g.append("[0:a]aformat=channel_layouts=stereo[ma]")
+    m = len(spans) + (1 if intro and os.path.exists(intro) else 0)
+    inputs += ["-i", main_path]
+    g.append(f"[{m}:v]fps=60,format=yuv420p,setsar=1[mv]")
+    g.append(f"[{m}:a]aformat=channel_layouts=stereo[ma]")
     parts.append("[mv][ma]")
     g.append(f"{''.join(parts)}concat=n={len(parts)}:v=1:a=1[v][a]")
     tmp_out = out_path + ".tmp.mp4"
     venc = ["-c:v", enc["encoder"]]
     if enc["encoder"] == "libx264":
-        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"])]
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]),
+                 "-threads", str(max(2, (os.cpu_count() or 8) // 2))]
     run([need("ffmpeg"), "-y", "-hide_banner", *inputs, "-filter_complex", ";".join(g), "-map", "[v]", "-map", "[a]",
          *venc, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", enc["audio_bitrate"], "-movflags", "+faststart", tmp_out])
     # The intro and teaser change the programme loudness: normalize the joined video as a whole.
