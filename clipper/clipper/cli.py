@@ -478,6 +478,16 @@ def cmd_prepare(a):
     return ok
 
 
+def cmd_ready(a):
+    from .site import write_ready
+    wd = work_dir(a.work)
+    problems = write_ready(wd)
+    if problems:
+        print("  投稿に回せません:\n" + "".join(f"      - {p}\n" for p in problems))
+        sys.exit(1)
+    print(f"  投稿待ちに登録: {os.path.join(wd, 'out', 'ready.json')}")
+
+
 def cmd_site(a):
     from .common import default_work_root
     from .site import write_index, write_video_page
@@ -563,6 +573,9 @@ def main(argv=None):
     s = sub.add_parser("site", help="一覧ページ・動画ページ・delivery.md を作り直す（省略時は全動画）")
     s.add_argument("work", nargs="?", default=None)
     s.set_defaults(f=cmd_site)
+    s = sub.add_parser("ready", help="全クリップ合格なら out/ready.json を書き、投稿側へ渡す")
+    s.add_argument("work")
+    s.set_defaults(f=cmd_ready)
     s = sub.add_parser("align"); s.add_argument("work"); s.add_argument("--only")
     s.add_argument("--no-speakers", action="store_true", help="話者の色分けをしない")
     s.set_defaults(f=lambda a: sys.exit(0 if cmd_align(a) else 1))

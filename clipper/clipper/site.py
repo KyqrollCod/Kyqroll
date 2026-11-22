@@ -280,6 +280,40 @@ def write_delivery(wd, meta, pkg, rows):
         fh.write("\n".join(lines) + "\n")
 
 
+def write_ready(wd):
+    """Hand a finished stream to the publishing side: out/ready.json lists every clip with what an
+    upload needs. Refuses (returns the reasons) unless every clip exists and passed qc, so a
+    half-done stream is never published. The publishing side never edits this file; it records
+    uploads in out/published.json."""
+    from .common import load_json as _lj
+    spec, pkg, rows = clip_rows(wd)
+    problems = [f"{r['id']}: 書き出しなし" for r in rows if not r["mp4"]]
+    problems += [f"{r['id']}: 品質チェック不合格または未実施" for r in rows if r["mp4"] and not (r["qc"] or {}).get("pass")]
+    if not rows:
+        problems.append("クリップがありません")
+    if problems:
+        return problems
+    mp = os.path.join(wd, "meta.json")
+    meta = _lj(mp) if os.path.exists(mp) else {}
+    out = os.path.join(wd, "out")
+    data = {
+        "stream_title": meta.get("title"), "stream_date": meta.get("upload_date"),
+        "source_url": pkg.get("source_url") or meta.get("webpage_url"),
+        "streamer": pkg.get("streamer"), "streamer_links": pkg.get("streamer_links") or [],
+        "collab": pkg.get("collab"), "game": pkg.get("game"),
+        "made": time.strftime("%Y-%m-%d %H:%M"),
+        "clips": [{
+            "id": r["id"], "format": r["format"], "duration": round(r["dur"] or 0, 1),
+            "file": os.path.join(out, f"{r['id']}.mp4"),
+            "thumbnail": os.path.join(out, f"{r['id']}_thumb.jpg") if r["thumb"] else None,
+            "title": r["title"], "description": r["desc"], "hashtags": r["tags"], "credit": r["credit"],
+        } for r in rows],
+    }
+    with open(os.path.join(out, "ready.json"), "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=1)
+    return []
+
+
 def write_index(root):
     cards = []
     for n in sorted(os.listdir(root), reverse=True):
