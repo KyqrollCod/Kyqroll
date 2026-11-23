@@ -191,6 +191,8 @@ def render_clip(wd, clip, st, gl, out_path, words):
     info = media_info(src)
     fps = min(cfg["fps"], round(info["fps"])) or 30
     layout = clip.get("layout") or (cfg.get("layout") if fmt == "short" else "full")
+    if fmt == "short" and not clip.get("layout") and clip.get("avatar_style"):
+        layout = "avatar"   # an avatar_style implies the avatar layout (layout_fixed alone used to drop it)
 
     # Snap every range to the frame grid so the video frames kept by select, the audio samples
     # kept by aselect and the Mapper used for telops all agree exactly (no drift across cuts).

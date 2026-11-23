@@ -392,8 +392,18 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
             hook_lines = wrap(clip["hook"], hk["max_chars_per_line"], 2)
             av = clip.get("_av") or cfg.get("avatar") or {}
             hy = av.get("hook_y", hk["y"]) if layout in ("avatar", "stack") else hk["y"]
+            hx, hsc = cx, 100
+            if cfg.get("safe") and hy + len(hook_lines) * hk["font_size"] > H * 0.55:
+                # A low hook (letterbox) must stay clear of the like/comment column too.
+                right, left = W - cfg["safe"]["right_px"], cfg["safe"].get("left_px", 40)
+                hw = max(dw(x) for x in hook_lines) * hk["font_size"]
+                if hw > right - left:
+                    hsc, hw = int(100 * (right - left) / hw), right - left
+                if cx + hw / 2 > right:
+                    hx = int(right - hw / 2)
+            fit = f"\\fscx{hsc}\\fscy{hsc}" if hsc < 100 else ""
             doc.append(_event(5, 0, duration, "Hook",
-                              f"{{\\pos({cx},{hy})}}" + "\\N".join(_esc(x) for x in hook_lines)))
+                              f"{{\\pos({hx},{hy}){fit}}}" + "\\N".join(_esc(x) for x in hook_lines)))
         if layout == "letterbox":
             for lb in cfg.get("name_labels") or []:
                 col = ass_color(lb.get("color", "#FFFFFF"))
@@ -425,7 +435,8 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
             # would cross it moves left first, and only shrinks if it is wider than the free span.
             right = W - cfg["safe"]["right_px"]
             left = cfg["safe"].get("left_px", 40)
-            w = max(dw(r) for r in rows) * sc["font_size"] * scale / 100
+            # a shout overshoots by 12% while it pops in: keep that peak clear too
+            w = max(dw(r) for r in rows) * sc["font_size"] * scale / 100 * (1.12 if tone == "shout" else 1.0)
             if w > (right - left):
                 scale = int(scale * (right - left) / w)
                 w = right - left
