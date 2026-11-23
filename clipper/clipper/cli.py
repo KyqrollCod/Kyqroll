@@ -157,7 +157,9 @@ def cmd_render(a):
                                             c.get("thumbnail_sticker"), style=c.get("thumbnail_style"),
                                             avatar=c.get("avatar") or pkg.get("avatar"), focus=c.get("thumbnail_focus"),
                                             seed=f"{os.path.basename(wd)}:{c['id']}",
-                                            font=c.get("thumbnail_font"), palette=c.get("thumbnail_palette"))
+                                            font=c.get("thumbnail_font"), palette=c.get("thumbnail_palette"),
+                                            quotes=c.get("thumbnail_quotes") or thumb_quotes(c),
+                                            partner=c.get("partner_name") or pkg.get("partner_name"))
         reports.append(r)
         print(f"  {r['id']}: {r['duration']}s ({r['segments']} segments, -{r['removed_sec']}s) -> {out}")
     _merge_json(os.path.join(out_dir, "render.json"), reports, lambda r: r["id"])
@@ -637,6 +639,23 @@ def cmd_run(a):
     a.only, a.asr = None, "medium"
     cmd_render(a)
     sys.exit(0 if cmd_qc(a) else 1)
+
+
+def thumb_quotes(c, n=2, max_len=16):
+    """Lines for the thumbnail's quote rows: the clip's emphasized / shouted script lines."""
+    out = []
+    for raw in c.get("script") or []:
+        raw = str(raw).strip()
+        if not raw or raw[0] not in "*!":
+            continue
+        t = raw.lstrip("*!~").strip()
+        m = re.match(r"@([^:：\s]+)[:：]\s*", t)
+        spk = m.group(1) if m else "配信者"
+        t = t[m.end():] if m else t
+        t = t.replace("\\n", "").replace("\n", "")
+        if t and not t.startswith("（") and len(t) <= max_len:
+            out.append({"text": t, "speaker": spk})
+    return out[:n]
 
 
 def main(argv=None):

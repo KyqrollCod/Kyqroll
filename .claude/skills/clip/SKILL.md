@@ -94,14 +94,15 @@ or qc and point them to http://localhost:8765/.
   - Shorts composition `avatar_style: standard|big_game|left|small`, or `layout: stack` with
     `stack_focus: [x, y, w, h]` (whole game on top, a zoomed detail below). Set `layout_fixed: true` so
     package.short_layout doesn't override it.
-  - Thumbnails `thumbnail_style: band|bottom|punch|avatar|zoom|bubble`. If unset, it is picked from
-    stream+clip id. `thumbnail_focus` sets the zoom point.
+  - Thumbnails (owner rejected decorative fonts; modelled on popular JP clip channels):
+    `thumbnail_style: caption|quotes|face|comment|drama`. Auto-picked styles skip drama. The text is heavy gothic
+    with a thick black outline and a gradient 『key』. Quote rows come from the script's `*`/`!` lines and carry
+    speaker icons. A ろあろああ tag sits top-left.
   - Shorts may run past 60 s. Every Short gets the end card `<work_root>/_素材/共通/アウトロ_ショート.mp4`
     (「Twitchで配信中！」, made by the stream-intro session) appended when the file exists
     (`outro: false` per clip/package to skip).
   - Design: style.yaml `fonts` (12 OFL Japanese fonts in assets/fonts) and `thumbnail.palettes`.
-    The thumbnail style, palette and font are each picked per stream + clip number, so the long videos of a
-    stream never share one. Override with `thumbnail_palette` / `thumbnail_font`. Shorts take
+    Thumbnails only auto-pick heavy fonts. Shorts take
     `telop_font`, `hook_font`, `telop_outline: [outer, inner]` and `hook_colors: [fill, outline]`.
     Speaker fill colours stay fixed.
 - Publishing handoff: `python -m clipper ready <wd>` writes out/ready.json only when every clip

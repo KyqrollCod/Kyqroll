@@ -19,6 +19,8 @@ fonts:                                     # key: [ファイル, フォント名
   kaisei: [KaiseiDecol-Bold.ttf, Kaisei Decol]                # 明朝系（ホラー・シリアス）
   hachimaru: [HachiMaruPop-Regular.ttf, Hachi Maru Pop]       # 丸文字（かわいい）
   dot: [DotGothic16-Regular.ttf, DotGothic16]                 # ドット（レトロゲーム）
+  mplus1p: [MPLUS1p-Black.ttf, M PLUS 1p Black]              # 極太ゴシック（サムネの標準。読みやすさ最優先）
+  zenmincho: [ZenOldMincho-Black.ttf, Zen Old Mincho Black]  # 極太明朝（シリアス・ドラマ風）
 
 encode:
   encoder: libx264        # NVIDIA GPU なら h264_nvenc
@@ -160,17 +162,17 @@ thumbnail:
   stroke_color: "#000000"
   stroke: 14
   border_colors: ["#FF2020", "#FFE600"]
-  fonts: [dela, zenkaku, rocknroll, reggae, mochiy, potta, rampart]   # 自動で選ぶ候補（kaisei・yusei・hachimaru・dot は内容に合う時に thumbnail_font で指定）
-  auto_palettes: [classic, neon, pop, fire, mint, paper, sky]          # 自動で選ぶ配色（horror はホラーゲームの時に thumbnail_palette で指定）
-  palettes:               # thumbnail_palette で指定（未指定なら配信とクリップで自動に変わる）
-    classic: {text: "#FFFFFF", key: "#FF4040", stroke: "#000000", accent: "#FFE600", accent2: "#FF2020", band: "#000000"}
-    neon:    {text: "#FFFFFF", key: "#37E0FF", stroke: "#0B0F2E", accent: "#9146FF", accent2: "#37E0FF", band: "#0B0F2E"}
-    pop:     {text: "#FFFFFF", key: "#FF5AA5", stroke: "#3A1640", accent: "#FFD23F", accent2: "#FF5AA5", band: "#3A1640"}
-    fire:    {text: "#FFF35A", key: "#FF3B3B", stroke: "#000000", accent: "#FF7A00", accent2: "#FF3B3B", band: "#1A0500"}
-    mint:    {text: "#FFFFFF", key: "#3BFF9E", stroke: "#06261A", accent: "#3BFF9E", accent2: "#00B3A4", band: "#06261A"}
-    paper:   {text: "#111111", key: "#E8202A", stroke: "#FFFFFF", accent: "#111111", accent2: "#E8202A", band: "#FFFFFF"}
-    sky:     {text: "#FFFFFF", key: "#FFE14D", stroke: "#0D3B66", accent: "#3FA9F5", accent2: "#FFE14D", band: "#0D3B66"}
-    horror:  {text: "#F2F2F2", key: "#E01010", stroke: "#000000", accent: "#7A0000", accent2: "#E01010", band: "#0A0000"}
+  # サムネ（オーナー 2026-11-23: 人気の切り抜きチャンネルを参考に、読みやすさとインパクト優先。細い・崩した書体は使わない）
+  fonts: [mplus1p, zenkaku, dela]   # 自動で選ぶ書体（極太ゴシックだけ）。drama の型は極太明朝
+  drama_font: zenmincho
+  auto_palettes: [red, yellow, gold, blue, purple]
+  palettes:               # text / key は [上の色, 下の色] のグラデーション。stroke=黒フチ、outer=外側の細フチ（null で無し）、accent=タグ・アイコン枠
+    red:    {text: ["#FFFFFF", "#FFFFFF"], key: ["#FF6A6A", "#D10000"], stroke: "#000000", outer: "#FFFFFF", accent: "#E8202A"}
+    yellow: {text: ["#FFFFFF", "#FFFFFF"], key: ["#FFF65C", "#FF9C00"], stroke: "#000000", outer: null, accent: "#FF9C00"}
+    gold:   {text: ["#FFF65C", "#FFC400"], key: ["#FF6A6A", "#D10000"], stroke: "#000000", outer: null, accent: "#D10000"}
+    blue:   {text: ["#FFFFFF", "#FFFFFF"], key: ["#7DF3FF", "#1E7BFF"], stroke: "#03102A", outer: "#FFFFFF", accent: "#1E7BFF"}
+    purple: {text: ["#FFFFFF", "#FFFFFF"], key: ["#E2C6FF", "#8A3CFF"], stroke: "#14002E", outer: "#FFFFFF", accent: "#9146FF"}
+    mono:   {text: ["#FFFFFF", "#E6E6E6"], key: ["#FF5A5A", "#C00000"], stroke: "#000000", outer: null, accent: "#C00000"}
 
 analysis:
   bin_sec: 1.0
