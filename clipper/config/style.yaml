@@ -6,6 +6,19 @@ font_telop: "Rounded Mplus 1c Black"     # 字幕・帯（assets/fonts/MPLUSRoun
 font_impact: "Dela Gothic One"           # オチ・サムネ（assets/fonts/DelaGothicOne-Regular.ttf）
 font_telop_file: MPLUSRounded1c-Black.ttf
 font_impact_file: DelaGothicOne-Regular.ttf
+fonts:                                     # key: [ファイル, フォント名]（すべて OFL。thumbnail_font / telop_font / hook_font で key を指定）
+  dela: [DelaGothicOne-Regular.ttf, Dela Gothic One]          # 極太ゴシック（従来のサムネ・オチ）
+  mplus: [MPLUSRounded1c-Black.ttf, Rounded Mplus 1c Black]   # 丸ゴシック（従来のテロップ）
+  zenkaku: [ZenKakuGothicNew-Black.ttf, Zen Kaku Gothic New Black]   # 角ゴシック極太（硬派・ニュース風）
+  rocknroll: [RocknRollOne-Regular.ttf, RocknRoll One]        # 丸くて力強い（ポップ）
+  reggae: [ReggaeOne-Regular.ttf, Reggae One]                 # 角ばった勢い（バトル・叫び）
+  mochiy: [MochiyPopOne-Regular.ttf, Mochiy Pop One]          # ぽってり可愛い
+  potta: [PottaOne-Regular.ttf, Potta One]                    # 筆っぽいポップ（ドタバタ）
+  rampart: [RampartOne-Regular.ttf, Rampart One]              # 立体の袋文字（目立つ見出し）
+  yusei: [YuseiMagic-Regular.ttf, Yusei Magic]                # マーカー手書き（ゆるい・小声）
+  kaisei: [KaiseiDecol-Bold.ttf, Kaisei Decol]                # 明朝系（ホラー・シリアス）
+  hachimaru: [HachiMaruPop-Regular.ttf, Hachi Maru Pop]       # 丸文字（かわいい）
+  dot: [DotGothic16-Regular.ttf, DotGothic16]                 # ドット（レトロゲーム）
 
 encode:
   encoder: libx264        # NVIDIA GPU なら h264_nvenc
@@ -147,6 +160,17 @@ thumbnail:
   stroke_color: "#000000"
   stroke: 14
   border_colors: ["#FF2020", "#FFE600"]
+  fonts: [dela, zenkaku, rocknroll, reggae, mochiy, potta, rampart]   # 自動で選ぶ候補（kaisei・yusei・hachimaru・dot は内容に合う時に thumbnail_font で指定）
+  auto_palettes: [classic, neon, pop, fire, mint, paper, sky]          # 自動で選ぶ配色（horror はホラーゲームの時に thumbnail_palette で指定）
+  palettes:               # thumbnail_palette で指定（未指定なら配信とクリップで自動に変わる）
+    classic: {text: "#FFFFFF", key: "#FF4040", stroke: "#000000", accent: "#FFE600", accent2: "#FF2020", band: "#000000"}
+    neon:    {text: "#FFFFFF", key: "#37E0FF", stroke: "#0B0F2E", accent: "#9146FF", accent2: "#37E0FF", band: "#0B0F2E"}
+    pop:     {text: "#FFFFFF", key: "#FF5AA5", stroke: "#3A1640", accent: "#FFD23F", accent2: "#FF5AA5", band: "#3A1640"}
+    fire:    {text: "#FFF35A", key: "#FF3B3B", stroke: "#000000", accent: "#FF7A00", accent2: "#FF3B3B", band: "#1A0500"}
+    mint:    {text: "#FFFFFF", key: "#3BFF9E", stroke: "#06261A", accent: "#3BFF9E", accent2: "#00B3A4", band: "#06261A"}
+    paper:   {text: "#111111", key: "#E8202A", stroke: "#FFFFFF", accent: "#111111", accent2: "#E8202A", band: "#FFFFFF"}
+    sky:     {text: "#FFFFFF", key: "#FFE14D", stroke: "#0D3B66", accent: "#3FA9F5", accent2: "#FFE14D", band: "#0D3B66"}
+    horror:  {text: "#F2F2F2", key: "#E01010", stroke: "#000000", accent: "#7A0000", accent2: "#E01010", band: "#0A0000"}
 
 analysis:
   bin_sec: 1.0

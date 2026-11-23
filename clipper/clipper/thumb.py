@@ -53,25 +53,58 @@ def lift_dark(img, target=105.0, max_gain=2.2):
 STYLES = ("band", "bottom", "punch", "avatar", "zoom", "bubble")
 
 
-def make_thumbnail(src, t, text, st, out_path, sticker=None, style=None, avatar=None, focus=None, seed=""):
+def _pick(salt, seed, n_items, step=1):
+    """Pick for seed "<stream>:<clip id>": a per-stream start plus the clip number, so the long videos
+    of one stream never share a style/palette/font, and streams start at different places."""
+    import re
+    stream, _, cid = str(seed).rpartition(":")
+    n = int(re.sub(r"\D", "", cid) or 0)
+    return (_h(f"{salt}:{stream or seed}") + n * step) % n_items
+
+
+def _h(s):
+    """Independent, well-spread picks per salt (crc32 of salt+seed is linear, so picks correlated)."""
+    import hashlib
+    return int(hashlib.md5(str(s).encode("utf-8")).hexdigest()[:8], 16)
+
+
+def design(st, seed="", font=None, palette=None):
+    """Font file + colour palette for a thumbnail. Each is picked from the clip id with its own salt,
+    so layout, typeface and colours vary independently (owner 2026-11-23: 色合いやフォントも色々)."""
+    th, fonts = st["thumbnail"], st.get("fonts") or {}
+    pals = th.get("palettes") or {"classic": {}}
+    auto = [k for k in th.get("auto_palettes") or sorted(pals) if k in pals]
+    pk = palette if palette in pals else auto[_pick("pal", seed, len(auto), 3)]
+    cands = th.get("fonts") or ["dela"]
+    fk = font if font in fonts else cands[_pick("font", seed, len(cands), 2)]
+    ffile = (fonts.get(fk) or [st["font_impact_file"]])[0]
+    p = {"text": "#FFFFFF", "key": "#FF4040", "stroke": "#000000", "accent": "#FFE600", "accent2": "#FF2020",
+         "band": "#000000", **(pals.get(pk) or {})}
+    return {"font": os.path.join(fonts_dir(st), ffile), "font_key": fk, "palette": pk, **p}
+
+
+def make_thumbnail(src, t, text, st, out_path, sticker=None, style=None, avatar=None, focus=None, seed="",
+                   font=None, palette=None):
     """Several proven thumbnail shapes so a channel's grid isn't one pattern (owner 2026-11-23).
     style: band (top band, the original) / bottom (slanted band bottom-left) / punch (huge tilted
     text, no band) / avatar (streamer art left, text right) / zoom (zoomed frame, caption boxes) /
     bubble (speech bubble). Unset: picked from the clip id so neighbours differ."""
-    import zlib
-    style = style or STYLES[zlib.crc32(str(seed).encode()) % len(STYLES)]
+    style = style or STYLES[_pick("style", seed, len(STYLES))]
     if style == "avatar" and not (avatar and os.path.exists(avatar)):
         style = "punch"
+    dz = design(st, seed, font, palette)
     if style != "band":
-        return _styled(src, t, text, st, out_path, style, avatar, focus)
+        return _styled(src, t, text, st, out_path, style, avatar, focus, dz)
     text = str(text).replace("\\n", "").replace("\n", "")
     th = st["thumbnail"]
     W, H = th["size"]
     img = _cover(lift_dark(grab_frame(src, t)), W, H)
     d = ImageDraw.Draw(img)
     bh = th["band_h"]
+    th = {**th, "band_color": dz["band"], "text_color": dz["text"], "key_color": dz["key"],
+          "stroke_color": dz["stroke"], "border_colors": [dz["accent2"], dz["accent"]]}
     d.rectangle([0, 0, W, bh], fill=th["band_color"])
-    font_path = os.path.join(fonts_dir(st), st["font_impact_file"])
+    font_path = dz["font"]
     runs = _runs(text)
     size = int(bh * 0.86)
     while size > 40:
@@ -100,8 +133,16 @@ def make_thumbnail(src, t, text, st, out_path, sticker=None, style=None, avatar=
     return out_path
 
 
+_FONT = {"path": None}
+
+
 def _font(st, size):
-    return ImageFont.truetype(os.path.join(fonts_dir(st), st["font_impact_file"]), size)
+    return ImageFont.truetype(_FONT["path"] or os.path.join(fonts_dir(st), st["font_impact_file"]), size)
+
+
+def _rgba(hexc, a):
+    h = hexc.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 
 
 def _lw(d, ln, f):
@@ -130,13 +171,22 @@ def _draw_lines(d, lines, f, size, x0, y0, colors=("#FFFFFF", "#FF4040"), stroke
 
 def _split2(line):
     """One long line → two, breaking before the 『key』 when there is one, else in the middle."""
-    k = line.find("『")
-    cut = k if 2 < k < len(line) - 2 else len(line) // 2
+    k, e = line.find("『"), line.find("』")
+    if 2 < k < len(line) - 2:
+        cut = k
+    elif 0 <= e < len(line) - 2:
+        cut = e + 1
+    else:
+        cut = len(line) // 2
+        while cut < len(line) - 1 and line[cut] in "』」）！？ー〜、。ゃゅょっャュョッ":
+            cut += 1
     return [line[:cut], line[cut:]]
 
 
-def _styled(src, t, text, st, out_path, style, avatar, focus):
+def _styled(src, t, text, st, out_path, style, avatar, focus, dz):
     from PIL import ImageEnhance, ImageFilter
+    _FONT["path"] = dz["font"]
+    TX, KY, SK, AC = dz["text"], dz["key"], dz["stroke"], dz["accent"]
     W, H = st["thumbnail"]["size"]
     frame = lift_dark(grab_frame(src, t))
     lines = [x for x in str(text).replace("\\n", "\n").split("\n") if x.strip()] or [str(text)]
@@ -154,41 +204,41 @@ def _styled(src, t, text, st, out_path, style, avatar, focus):
     d = ImageDraw.Draw(img, "RGBA")
     if style == "bottom":
         bh = 210
-        d.polygon([(0, H - bh - 30), (int(W * 0.74), H - bh), (int(W * 0.70), H), (0, H)], fill=(0, 0, 0, 225))
+        d.polygon([(0, H - bh - 30), (int(W * 0.74), H - bh), (int(W * 0.70), H), (0, H)], fill=_rgba(dz["band"], 225))
         d.polygon([(0, H - bh - 42), (int(W * 0.745), H - bh - 12), (int(W * 0.74), H - bh), (0, H - bh - 30)],
-                  fill="#FFE600")
+                  fill=AC)
         f, size = _fit_lines(d, st, lines[:2], int(W * 0.62), bh - 30, 150)
-        _draw_lines(d, lines[:2], f, size, 34, H - bh - 4, colors=("#FFFFFF", "#FFE600"), stroke=10)
+        _draw_lines(d, lines[:2], f, size, 34, H - bh - 4, colors=(TX, KY), stroke=10, stroke_fill=SK)
     elif style == "punch":
         layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         dl = ImageDraw.Draw(layer)
         f, size = _fit_lines(dl, st, lines[:2], int(W * 0.86), int(H * 0.62), 230)
-        _draw_lines(dl, lines[:2], f, size, 60, int(H * 0.14), colors=("#FFF35A", "#FF3B3B"), stroke=16)
+        _draw_lines(dl, lines[:2], f, size, 60, int(H * 0.14), colors=(TX, KY), stroke=16, stroke_fill=SK)
         layer = layer.rotate(4, resample=Image.BICUBIC, center=(W // 2, H // 2))
         img.paste(layer, (0, 0), layer)
         d = ImageDraw.Draw(img, "RGBA")
-        d.rectangle([0, 0, W - 1, H - 1], outline="#FFF35A", width=10)
+        d.rectangle([0, 0, W - 1, H - 1], outline=AC, width=10)
     elif style == "avatar":
         art = Image.open(avatar).convert("RGBA")
         r = (H * 1.05) / art.height
         art = art.resize((int(art.width * r), int(art.height * r)), Image.LANCZOS)
-        halo = Image.new("RGBA", art.size, (55, 224, 255, 0))
+        halo = Image.new("RGBA", art.size, _rgba(AC, 0))
         halo.putalpha(art.split()[3].filter(ImageFilter.GaussianBlur(14)).point(lambda a: min(255, a * 2)))
         pos = (-int(art.width * 0.18), H - art.height + 40)
         img.paste(halo, pos, halo)
         img.paste(art, pos, art)
         d = ImageDraw.Draw(img, "RGBA")
-        bx = int(W * 0.50)
-        f, size = _fit_lines(d, st, lines[:3], W - bx - 40, int(H * 0.62), 170)
-        _draw_lines(d, lines[:3], f, size, bx, 40, colors=("#FFFFFF", "#37E0FF"), stroke=14)
+        bx = int(W * 0.43)
+        f, size = _fit_lines(d, st, lines[:3], W - bx - 36, int(H * 0.66), 190)
+        _draw_lines(d, lines[:3], f, size, bx, 40, colors=(TX, KY), stroke=14, stroke_fill=SK)
     elif style == "zoom":
         f, size = _fit_lines(d, st, lines[:2], int(W * 0.80), int(H * 0.40), 140)
         y = 30
         for ln in lines[:2]:
-            d.rectangle([30, y - 6, 30 + _lw(d, ln, f) + 75, y + size * 1.08], fill=(0, 0, 0, 230))
-            _draw_lines(d, [ln], f, size, 52, y, colors=("#FFFFFF", "#FFE600"), stroke=0)
+            d.rectangle([30, y - 6, 30 + _lw(d, ln, f) + 75, y + size * 1.08], fill=_rgba(dz["band"], 235))
+            _draw_lines(d, [ln], f, size, 52, y, colors=(TX if dz["band"] != TX else SK, KY), stroke=0)
             y += int(size * 1.25)
-        d.rectangle([0, 0, W - 1, H - 1], outline="#FFE600", width=8)
+        d.rectangle([0, 0, W - 1, H - 1], outline=AC, width=8)
     elif style == "bubble":
         f, size = _fit_lines(d, st, lines[:2], int(W * 0.66), int(H * 0.44), 150)
         w = max(_lw(d, ln, f) for ln in lines[:2])
@@ -199,7 +249,7 @@ def _styled(src, t, text, st, out_path, style, avatar, focus):
         d.polygon([(tx, y0 + hgt + 46), (tx + 70, y0 + hgt + 46), (tx + 10, y0 + hgt + 130)], fill="#FFFFFF",
                   outline="#111111")
         d.line([(tx + 5, y0 + hgt + 44), (tx + 65, y0 + hgt + 44)], fill="#FFFFFF", width=10)
-        _draw_lines(d, lines[:2], f, size, x0 + 40, y0 + 18, colors=("#111111", "#E8202A"), stroke=0)
-        d.rectangle([0, 0, W - 1, H - 1], outline="#FF5AA5", width=10)
+        _draw_lines(d, lines[:2], f, size, x0 + 40, y0 + 18, colors=("#111111", KY if KY.upper() not in ("#FFFFFF", "#FFF35A", "#FFE14D") else "#E8202A"), stroke=0)
+        d.rectangle([0, 0, W - 1, H - 1], outline=AC, width=10)
     img.convert("RGB").save(out_path, quality=95)
     return out_path

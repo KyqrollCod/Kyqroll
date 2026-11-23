@@ -356,8 +356,17 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
     """lines_out: [{start, end, text, speaker, emph}] in OUTPUT time."""
     cfg = st[fmt]
     W, H = cfg["size"]
-    sc = cfg["subs"]
     tel, imp = st["font_telop"], st["font_impact"]
+    fonts = st.get("fonts") or {}
+    # Per-clip design (owner 2026-11-23): telop_font / hook_font (keys of style.yaml fonts),
+    # telop_outline [outer, inner] and hook_colors [fill, outline]. Speaker fill colours stay as they are.
+    if clip.get("telop_font") in fonts:
+        tel = fonts[clip["telop_font"]][1]
+    if clip.get("hook_font") in fonts:
+        imp = fonts[clip["hook_font"]][1]
+    sc = dict(cfg["subs"])
+    if clip.get("telop_outline"):
+        sc["outer_color"], sc["inner_color"] = clip["telop_outline"][0], clip["telop_outline"][1]
     doc = [_header(W, H)]
     doc.append(_style("SubOuter", tel, sc["font_size"], sc["outer_color"], sc["outer_color"], sc["outline_outer"]))
     doc.append(_style("SubInner", tel, sc["font_size"], cfg["speakers"].get("default", "#FFFFFF"),
@@ -365,7 +374,8 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
     if fmt == "short":
         b, hk = cfg["band"], cfg["hook"]
         doc.append(_style("Band", tel, b["font_size"], b["text_color"], b["outline_color"], b["outline"], 5))
-        doc.append(_style("Hook", imp, hk["font_size"], hk["color"], hk["outline_color"], hk["outline"], 8))
+        hc = clip.get("hook_colors") or [hk["color"], hk["outline_color"]]
+        doc.append(_style("Hook", imp, hk["font_size"], hc[0], hc[1], hk["outline"], 8))
         doc.append(_style("Label", tel, 46, "#FFFFFF", "#000000", 5, 5))
     else:
         lb = cfg["label"]

@@ -156,7 +156,8 @@ def cmd_render(a):
                                             c["thumbnail_text"], st, os.path.join(out_dir, f"{c['id']}_thumb.jpg"),
                                             c.get("thumbnail_sticker"), style=c.get("thumbnail_style"),
                                             avatar=c.get("avatar") or pkg.get("avatar"), focus=c.get("thumbnail_focus"),
-                                            seed=f"{os.path.basename(wd)}:{c['id']}")
+                                            seed=f"{os.path.basename(wd)}:{c['id']}",
+                                            font=c.get("thumbnail_font"), palette=c.get("thumbnail_palette"))
         reports.append(r)
         print(f"  {r['id']}: {r['duration']}s ({r['segments']} segments, -{r['removed_sec']}s) -> {out}")
     _merge_json(os.path.join(out_dir, "render.json"), reports, lambda r: r["id"])
