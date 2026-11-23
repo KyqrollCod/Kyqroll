@@ -73,7 +73,7 @@ short:
     bg_dim: 0.32
   auto_se: true           # 強調行=pop、ズーム=whoosh、keep=impact、読み上げ=ding を自動で付ける
   bgm: comical            # comical / tension / none（clips.src.yaml の package.bgm やクリップの bgm で上書き）
-  bgm_db: -24             # BGM の音量（声が出ている間はさらに自動で下がる）
+  bgm_db: -27             # BGM の音量（オーナー 2026-11-23: あくまで背景。声が出ている間はさらに自動で下がる）
   safe:                   # YouTube ショートのUIに隠れる領域（ここに文字を置かない）
     bottom_px: 300
     right_px: 140
@@ -102,7 +102,7 @@ long:
     読み上げ: "#A6E35A"
   auto_se: true
   bgm: comical
-  bgm_db: -27             # 横型は控えめに
+  bgm_db: -30             # 横型はさらに控えめに（ゲーム音が主役）
   label:                  # 左上の常時ラベル（ゲーム名・局面など）
     x: 40
     y: 36

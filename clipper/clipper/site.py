@@ -67,7 +67,7 @@ body.has-side header,body.has-side main{margin-left:0}}
 pre.code{background:#11141a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12px}
 """
 
-NAV = [("tasks.html", "動いているタスク"), ("index.html", "動画一覧"), ("music.html", "曲リスト"),
+NAV = [("tasks.html", "動いているタスク"), ("index.html", "動画一覧"), ("music.html", "曲リスト"), ("se.html", "効果音"),
        ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順")]
 
 
@@ -370,6 +370,7 @@ def write_index(root):
     with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(_page("切り抜き制作", head, body))
     write_music(root)
+    write_se(root)
     return os.path.join(root, "index.html")
 
 
@@ -605,6 +606,47 @@ def write_music(root):
     out = os.path.join(root, "music.html")
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(_page("曲リスト", head, "".join(parts), active="music.html"))
+    return out
+
+
+def write_se(root):
+    """The SE list: <root>/_素材/SE/効果音リスト.yaml (the single source) → se.html and 効果音リスト.md."""
+    src = os.path.join(root, "_素材", "SE", "効果音リスト.yaml")
+    if not os.path.exists(src):
+        return None
+    doc = load_yaml(src) or {}
+    cats, sounds = doc.get("categories") or {}, doc.get("sounds") or []
+    by = {}
+    for x in sounds:
+        by.setdefault(x.get("cat"), []).append(x)
+    r = root.replace("\\", "/").rstrip("/") + "/"
+
+    def rel(path):
+        path = str(path).replace("\\", "/")
+        return "/" + _u(path[len(r):]) if path.startswith(r) else ""
+    parts = ["<div class='banner'>効果音の一覧です（場面ごと）。自動の効果音は場面ごとにこの中から毎回違う音が選ばれます。"
+             "手で置くときは clips.src.yaml のクリップに <code>se: [{at: 元配信秒, cat: fail}]</code>（カテゴリから自動で選ぶ）"
+             "か <code>{at: …, key: fail_tin1}</code>（音を指定）。<b>効果音は適量に</b>（ショートは1分に6個まで・3秒以上あける）。"
+             "出典: 効果音ラボ（収益化OK・クレジット不要。ファイルの再配布と、効果音を紹介する動画は禁止）。</div>"]
+    md = ["# 効果音リスト", "", "元データは 効果音リスト.yaml（このファイルは python -m clipper site で作り直す）。", "",
+          "- 自動: ズーム→whoosh、叫び(!)→surprise、強調(*)→pop、読み上げ→read、ショートの最初の keep→impact。カテゴリ内で毎回違う音。",
+          "- 手動: `se: [{at: <元配信秒>, cat: <カテゴリ>}]` または `{at: …, key: <key>}`。効果音は適量に（ショートは1分に6個まで、3秒以上あける）。",
+          "- 出典: 効果音ラボ https://soundeffect-lab.info/ （収益化OK・クレジット不要。再配布・効果音を紹介する動画・Content ID 登録は禁止）。", ""]
+    for cat, use in cats.items():
+        items = by.get(cat) or []
+        parts.append(f"<h2>{_e(cat)} — {_e(use)}（{len(items)}）</h2>")
+        md += [f"## {cat} — {use}", "", "| key | 音 | 秒 |", "|---|---|---|"]
+        for x in items:
+            parts.append(f"<div class='song'><b>{_e(x.get('title', ''))}</b> <code>{_e(x['key'])}</code> "
+                         f"{_e(x.get('sec', ''))}秒 <audio controls preload='none' src='{rel(x.get('file', ''))}'></audio></div>")
+            md.append(f"| {x['key']} | {x.get('title', '')} | {x.get('sec', '')} |")
+        md.append("")
+    with open(os.path.join(root, "_素材", "SE", "効果音リスト.md"), "w", encoding="utf-8") as fh:
+        fh.write(chr(10).join(md))
+    head = f"<h1>効果音</h1><span class='crumb'>{len(sounds)}種・場面別</span>"
+    out = os.path.join(root, "se.html")
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(_page("効果音", head, "".join(parts), active="se.html"))
     return out
 
 

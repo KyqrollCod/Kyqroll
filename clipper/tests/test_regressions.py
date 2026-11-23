@@ -64,6 +64,32 @@ def test_bgm_offset_and_switch_at_peak():
     assert level(12, 880) > 10 * level(12, 440)    # after it (output 9 s): only the second
 
 
+def test_variety_effects_and_bgm_rest():
+    """Zoom styles, flash, shout/whisper telops, SE from the list (key / cat) and a BGM rest span."""
+    wd = tempfile.mkdtemp()
+    _vod(os.path.join(wd, "source.mp4"), 20, audio=None)
+    a = os.path.join(wd, "calm.wav")
+    _ff("-f", "lavfi", "-i", "sine=f=440:d=30", a)
+    clip = {"id": "v", "format": "short", "start": 1, "end": 15, "trim_silence": False, "bgm": a,
+            "bgm_rest": [[6, 10]], "flash": [3], "auto_se": True,
+            "zoom": [{"at": 2, "style": "shake", "focus": [0.3, 0.4]}, {"at": 11, "style": "push", "dur": 2}],
+            "se": [{"at": 4, "cat": "fail"}, {"at": 12, "key": "success_correct1"}],
+            "subs": [{"text": "やばい", "start": 2, "end": 3, "emph": True, "tone": "shout"},
+                     {"text": "こごえ", "start": 4, "end": 5, "tone": "whisper"}]}
+    r = render_clip(wd, clip, style(), glossary(), os.path.join(wd, "out", "v.mp4"), [])
+    info = media_info(r["out"])
+    assert info["has_audio"] and abs(info["duration"] - 14) < 0.5
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", r["out"], "-ac", "1", "-ar", "8000", "-f", "f32le", "-"],
+                         capture_output=True).stdout
+    x = np.frombuffer(pcm, np.float32)
+
+    def level(t, hz=440):
+        spec = np.abs(np.fft.rfft(x[int(t * 8000):int(t * 8000) + 4000]))
+        return spec[hz // 2 - 10:hz // 2 + 10].max()
+    assert level(1.0) > 20 * level(7.0)    # BGM rests over output 5..9 s
+    assert level(11.5) > 20 * level(7.0)   # and comes back after
+
+
 def test_silent_and_no_audio_sources_render():
     wd = tempfile.mkdtemp()
     _vod(os.path.join(wd, "source.mp4"), 20, audio=None)

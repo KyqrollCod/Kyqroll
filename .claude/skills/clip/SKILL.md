@@ -81,6 +81,15 @@ or qc and point them to http://localhost:8765/.
   to cross to another song at the peak. `python -m clipper site` writes music.html and
   曲リスト.md; every added song must be added to the yaml. Every page has a sidebar (動画一覧 /
   曲リスト / 投稿の記録 / 編集手順).
+- BGM/SE/variety (owner, 2026-11-23): BGM is background only. Defaults are -27 dB for shorts and -30 dB for long
+  videos; never raise them. Use `bgm_switch` only where the mood really flips. `bgm_rest: [[a, b]]` (source sec)
+  fades the song out over fights or the pause before a punchline.
+  SE come from `<work_root>/_素材/SE/効果音リスト.yaml` (効果音ラボ: monetized use OK and no credit needed;
+  never redistribute the files or make SE-showcase videos). Auto SE rotate within each category per clip and
+  are sparse: shorts get at most 6/min with a 3 s gap, long videos 2/min. To place one by hand:
+  `se: [{at, cat|key}]`. The se.html page lists them.
+  Variety tools: script prefixes `*` emph / `!` shout (red, bigger, tilted bounce) / `~` whisper (small,
+  faint); zoom `style: punch|push|shake` with a per-zoom `focus: [x, y]`; `flash: [sec]`; per-clip `layout`.
 - Publishing handoff: `python -m clipper ready <wd>` writes out/ready.json only when every clip
   passed qc. The upload session records uploads in out/published.json.
 - Long videos open with up to 3 punchlines (≤8 s), then the channel intro (`long_intro` in

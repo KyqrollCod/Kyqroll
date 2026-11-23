@@ -190,16 +190,22 @@ def align_script(words, start, end, script, speech=None):
     for raw in script:
         raw = str(raw).strip()
         if raw:
-            text = raw.lstrip("*").strip()
+            text = raw.lstrip("*!~").strip()
             m = re.match(r"@([^:：\s]+)[:：]\s*", text)   # "@男性:テキスト" forces the speaker
             spk = m.group(1) if m else None
             text = text[m.end():] if m else text
             key = _akey(text)
-            items.append((raw.startswith("*"), text, key, is_note(text) or not key, spk))
+            # '*' emphasis, '!' shout (bigger, shaken, red), '~' whisper / inner voice (small, faint)
+            tone = "shout" if raw.startswith("!") else "whisper" if raw.startswith("~") else raw.startswith("*")
+            items.append((tone, text, key, is_note(text) or not key, spk))
     out, warn, cur = [], [], 0
     for n, (emph, text, key, note, spk) in enumerate(items):
         ln = {"text": text, "start": None, "end": None}
-        if emph:
+        if emph in ("shout", "whisper"):
+            ln["tone"] = emph
+            if emph == "shout":
+                ln["emph"] = True
+        elif emph:
             ln["emph"] = True
         if spk:
             ln["speaker"] = spk
@@ -393,8 +399,15 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
         rows = wrap(ln["text"], sc["max_chars_per_line"], sc["max_lines"])
         body = "\\N".join(_esc(r) for r in rows)
         fill = cfg["speakers"].get(ln.get("speaker") or "default", cfg["speakers"].get("default"))
+        tone = ln.get("tone")
         scale = sc["emph_scale"] if ln.get("emph") else 100
+        if tone == "shout":
+            scale = int(sc["emph_scale"] * 1.18)
+        elif tone == "whisper":
+            scale = 78
         fill = sc["emph_color"] if ln.get("emph") and not ln.get("speaker") else fill
+        if tone == "shout" and not ln.get("speaker"):
+            fill = sc.get("shout_color", "#FF5A4E")
         x = cx
         if fmt == "short" and cfg.get("safe"):
             # Keep the caption clear of the Shorts like/comment column on the right: a row that
@@ -408,6 +421,11 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
             if cx + w / 2 > right:
                 x = int(right - w / 2)
         pop = f"\\fscx{int(scale * 0.82)}\\fscy{int(scale * 0.82)}\\t(0,90,\\fscx{scale}\\fscy{scale})"
+        if tone == "shout":     # overshoot then settle, slightly tilted
+            pop = (f"\\frz-2\\fscx{int(scale * 0.6)}\\fscy{int(scale * 0.6)}"
+                   f"\\t(0,70,\\fscx{int(scale * 1.12)}\\fscy{int(scale * 1.12)})\\t(70,150,\\fscx{scale}\\fscy{scale})")
+        elif tone == "whisper":
+            pop = f"\\fscx{scale}\\fscy{scale}\\alpha&H50&\\fad(120,0)"
         pos = f"\\an2\\pos({x},{bottom})"
         doc.append(_event(1, ln["start"], ln["end"], "SubOuter", f"{{{pos}{pop}}}{body}"))
         doc.append(_event(2, ln["start"], ln["end"], "SubInner",

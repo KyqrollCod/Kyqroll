@@ -175,9 +175,45 @@ _SE = {"pop": se_pop, "whoosh": se_whoosh, "impact": se_impact, "ding": se_ding,
 _BGM = {"comical": bgm_comical, "tension": bgm_tension}
 
 
+def se_catalog():
+    """The SE list kept with the work folders (<work_root>/_素材/SE/効果音リスト.yaml): {key: sound}."""
+    from .common import default_work_root, load_yaml
+    p = os.path.join(default_work_root(), "_素材", "SE", "効果音リスト.yaml")
+    if not os.path.exists(p):
+        return {}
+    return {s["key"]: s for s in (load_yaml(p) or {}).get("sounds") or [] if s.get("key")}
+
+
+# Built-in fallbacks per category when the SE list is missing.
+_SE_FALLBACK = {"pop": "pop", "whoosh": "whoosh", "impact": "impact", "read": "ding", "fail": "boing",
+                "tsukkomi": "boing", "success": "sparkle", "surprise": "impact", "shock": "boing"}
+# Mix level per category (the list's files are peak-normalized to -4 dBFS; SE stay under the voice).
+SE_LEVEL = {"pop": 0.28, "whoosh": 0.28, "impact": 0.38, "tsukkomi": 0.38, "fail": 0.38, "shock": 0.36,
+            "success": 0.36, "surprise": 0.36, "horror": 0.32, "read": 0.24, "bleep": 0.55}
+
+
+def se_variants(cat):
+    return sorted(k for k, s in se_catalog().items() if s.get("cat") == cat)
+
+
+def se_pick(cat, seed):
+    """A sound of the category, rotating with `seed` so repeated cues don't all sound the same."""
+    keys = se_variants(cat)
+    if keys:
+        return se_path(keys[seed % len(keys)])
+    return se_path(_SE_FALLBACK.get(cat, "pop"))
+
+
 def se_path(name):
+    if name not in _SE:
+        s = se_catalog().get(name)
+        if s:
+            return s["file"]
+        if name in _SE_FALLBACK or name in SE_LEVEL:
+            return se_pick(name, 0)
+        raise ValueError(f"効果音「{name}」がありません（効果音リスト.yaml の key かカテゴリを指定）")
     p = os.path.join(SE_DIR, f"{name}.wav")
-    if not os.path.exists(p) and name in _SE:
+    if not os.path.exists(p):
         _write(p, _norm(_SE[name](), -18.0))
     return p
 

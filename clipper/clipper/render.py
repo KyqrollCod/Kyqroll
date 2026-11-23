@@ -58,22 +58,44 @@ def tree_expr(terms, op, k=8):
     return terms[0]
 
 
+def _zoom_term(z):
+    a, b, k = z["out_start"], z["out_end"], z["scale"] - 1
+    win = f"between(t\\,{a:.3f}\\,{b:.3f})"
+    if z.get("style") == "push":    # slow push-in over the whole span (tension, a reveal)
+        return f"{k:.3f}*clip((t-{a:.3f})/{max(0.2, b - a):.3f}\\,0\\,1)*{win}"
+    return f"{k:.3f}*{win}"         # punch / shake: instant punch-in
+
+
 def _zoom_expr(zooms):
     if not zooms:
         return None
-    terms = tree_expr((f"{z['scale'] - 1:.3f}*between(t\\,{z['out_start']:.3f}\\,{z['out_end']:.3f})"
-                       for z in zooms), "+")
-    return f"(1+{terms})"
+    return f"(1+{tree_expr((_zoom_term(z) for z in zooms), '+')})"
+
+
+def _focus_expr(zooms, base, axis):
+    """Per-zoom focus point (0..1 across the frame), else the clip's focus."""
+    terms = [f"{float(z['focus'][axis]) - base:.3f}*between(t\\,{z['out_start']:.3f}\\,{z['out_end']:.3f})"
+             for z in zooms if z.get("focus")]
+    return f"({base}+{tree_expr(terms, '+')})" if terms else str(base)
+
+
+def _shake_expr(zooms, amp=14):
+    """Camera shake for the first 0.4 s of `style: shake` zooms (an impact, a scream)."""
+    terms = [f"{amp}*sin(t*71)*between(t\\,{z['out_start']:.3f}\\,{z['out_start'] + 0.4:.3f})"
+             for z in zooms if z.get("style") == "shake"]
+    return tree_expr(terms, "+") if terms else "0"
 
 
 def _zoomed(label_in, W, H, zooms, label_out, focus=(0.5, 0.5)):
-    """Punch-in zoom on output-time intervals; output stays WxH."""
+    """Zoom on output-time intervals (punch / push / shake); output stays WxH."""
     expr = _zoom_expr(zooms)
     if not expr:
         return f"[{label_in}]null[{label_out}]"
-    fx, fy = focus
+    fx, fy = _focus_expr(zooms, focus[0], 0), _focus_expr(zooms, focus[1], 1)
+    sh = _shake_expr(zooms)
     return (f"[{label_in}]scale=w='trunc({W}*{expr}/2)*2':h='trunc({H}*{expr}/2)*2':eval=frame:flags=lanczos,"
-            f"crop={W}:{H}:x='(iw-{W})*{fx}':y='(ih-{H})*{fy}'[{label_out}]")
+            f"crop={W}:{H}:x='clip((iw-{W})*{fx}+{sh}\\,0\\,iw-{W})':"
+            f"y='clip((ih-{H})*{fy}+0.6*({sh})\\,0\\,ih-{H})'[{label_out}]")
 
 
 def build_clip_lines(clip, words, gl, st, fmt):
@@ -84,27 +106,40 @@ def build_clip_lines(clip, words, gl, st, fmt):
     return auto_lines(words, float(clip["start"]), float(clip["end"]), sc["max_chars_per_line"], gl)
 
 
-def auto_se(clip, lines, zooms, mp, st, min_gap=1.6, limit_per_min=14):
-    """Automatic cues in output time: emph line → pop, zoom → whoosh, keep (visual payoff) →
-    impact, chat read aloud → ding. Spaced out so they punctuate instead of clutter."""
-    from .audiogen import se_path
+def auto_se(clip, lines, zooms, mp, st, fmt="short", taken=()):
+    """Automatic cues in output time, sparse and varied (owner 2026-11-23: SE は適量・バリエーション多め):
+    zoom → whoosh, shout line → surprise, emph line → pop, chat read aloud → read, and in Shorts the
+    first keep (visual payoff) → impact. Each category rotates through the SE list per clip, and cues
+    keep a minimum gap from each other and from hand-placed SE (`taken`)."""
+    import zlib
+    from .audiogen import SE_LEVEL, se_pick
+    cfg = st[fmt]
+    min_gap = float(cfg.get("se_min_gap", 3.0 if fmt == "short" else 6.0))
+    per_min = float(cfg.get("se_per_min", 6 if fmt == "short" else 2))
     cues = []
     for z in zooms:
-        cues.append((max(0.0, z["out_start"] - 0.18), "whoosh", 0.55))
-    for k in clip.get("keep") or []:
-        cues.append((mp.to_out_clamped(float(k[0])), "impact", 0.7))
+        cues.append((max(0.0, z["out_start"] - 0.18), "whoosh", 1))
+    if fmt == "short":
+        for k in (clip.get("keep") or [])[:1]:
+            cues.append((mp.to_out_clamped(float(k[0])), "impact", 1))
     for ln in lines:
         if ln.get("speaker") == "読み上げ":   # just before the reading, never over its first syllables
-            cues.append((max(0.0, ln["start"] - 0.45), "ding", 0.32))
+            cues.append((max(0.0, ln["start"] - 0.45), "read", 2))
+        elif ln.get("tone") == "shout":
+            cues.append((ln["start"], "surprise", 0))
         elif ln.get("emph"):
-            cues.append((ln["start"], "pop", 0.5))
-    cues.sort()
-    out, last = [], -9.0
-    cap = max(3, int(mp.duration / 60 * limit_per_min))
-    for t, name, vol in cues:
-        if t - last >= min_gap and len(out) < cap:
-            out.append((se_path(name), t, vol))
-            last = t
+            cues.append((ln["start"], "pop", 3))
+    cues.sort(key=lambda c: (c[0], c[2]))
+    seed = zlib.crc32(str(clip.get("id", "")).encode())
+    out, used, n_cat = [], list(taken), {}
+    cap = max(2, int(mp.duration / 60 * per_min))
+    for t, cat, _ in cues:
+        if len(out) >= cap or any(abs(t - u) < min_gap for u in used):
+            continue
+        n = n_cat.get(cat, 0)
+        n_cat[cat] = n + 1
+        out.append((se_pick(cat, seed + n), t, SE_LEVEL.get(cat, 0.3)))
+        used.append(t)
     return out
 
 
@@ -186,7 +221,8 @@ def render_clip(wd, clip, st, gl, out_path, words):
     for z in clip.get("zoom") or []:
         o = mp.to_out_clamped(float(z["at"]))
         zooms.append({"scale": float(z.get("scale", 1.18)), "out_start": o,
-                      "out_end": min(dur, o + float(z.get("dur", 1.5)))})
+                      "out_end": min(dur, o + float(z.get("dur", 1.5))),
+                      "style": z.get("style", "punch"), "focus": z.get("focus")})
 
     tmp = tempfile.mkdtemp(prefix="clip_")
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
@@ -313,14 +349,31 @@ def render_clip(wd, clip, st, gl, out_path, words):
         cur, idx = f"o{k}", idx + 1
 
     # 4) Subtitles and text.
+    # Flash: a two-step white flash at hand-picked moments (an impact, a reveal). `flash: [<source sec>]`
+    for k, fsec in enumerate(clip.get("flash") or []):
+        o = mp.to_out_clamped(float(fsec))
+        g.append(f"[{cur}]eq=brightness=0.45:enable='between(t\\,{o:.3f}\\,{o + 0.05:.3f})',"
+                 f"eq=brightness=0.18:enable='between(t\\,{o + 0.05:.3f}\\,{o + 0.14:.3f})'[fl{k}]")
+        cur = f"fl{k}"
     g.append(f"[{cur}]ass=filename={ff_escape(ass_path)}:fontsdir={ff_escape(fonts_dir(st))},"
              f"format=yuv420p[outv]")
 
     # 5) Sound effects mixed on output time: hand-placed ones plus automatic cues.
-    se_items = [(_asset(se["file"], "se"), mp.to_out_clamped(float(se["at"])),
-                 float(se.get("volume", st["audio"]["se_volume"]))) for se in clip.get("se") or []]
+    # Hand-placed SE: {at, key} (a sound of the SE list), {at, cat} (a category, varied per clip) or {at, file}.
+    from .audiogen import SE_LEVEL, se_catalog, se_path, se_pick
+    se_items, secat = [], se_catalog()
+    for n, se in enumerate(clip.get("se") or []):
+        if se.get("key"):
+            path, cat = se_path(se["key"]), (secat.get(se["key"]) or {}).get("cat")
+        elif se.get("cat"):
+            import zlib
+            path, cat = se_pick(se["cat"], zlib.crc32(str(clip.get("id", "")).encode()) + n), se["cat"]
+        else:
+            path, cat = _asset(se["file"], "se"), None
+        vol = float(se.get("volume", SE_LEVEL.get(cat, st["audio"]["se_volume"]) if cat else st["audio"]["se_volume"]))
+        se_items.append((path, mp.to_out_clamped(float(se["at"])), vol))
     if clip.get("auto_se", cfg.get("auto_se", False)):
-        se_items += auto_se(clip, lines, zooms, mp, st)
+        se_items += auto_se(clip, lines, zooms, mp, st, fmt, taken=[t for _, t, _ in se_items])
     se_labels = []
     for k, (path, o, vol) in enumerate(se_items):
         inputs += ["-i", path]
@@ -375,8 +428,18 @@ def render_clip(wd, clip, st, gl, out_path, words):
         else:
             g.append("[bgmA]anull[bgmX]")
         idx -= 1   # the shared `idx += 1` below accounts for the last BGM input
-        g.append("[ca2]asplit=2[cav][cak]")
-        g.append("[bgmX][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
+        # bgm_rest [[a, b], ...] (source sec): the BGM fades out over these spans and comes back after
+        # (a fight where the game audio carries it, a quiet beat before the punchline).
+        rests = [(mp.to_out_clamped(float(a)), mp.to_out_clamped(float(b))) for a, b in clip.get("bgm_rest") or []]
+        rests = [(a, b) for a, b in rests if b - a > 0.5]
+        if rests:
+            f = "*".join(f"(1-clip(min((t-{a - 0.8:.3f})/0.8\\,({b + 0.8:.3f}-t)/0.8)\\,0\\,1))" for a, b in rests)
+            g.append(f"[bgmX]volume='{f}':eval=frame[bgmR]")
+            g.append("[ca2]asplit=2[cav][cak]")
+            g.append("[bgmR][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
+        else:
+            g.append("[ca2]asplit=2[cav][cak]")
+            g.append("[bgmX][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
         voice, beds = "cav", ["[bgd]"]
         idx += 1
     if se_labels or beds:
