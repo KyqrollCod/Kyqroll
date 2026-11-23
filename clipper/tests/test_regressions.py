@@ -105,6 +105,28 @@ def test_short_outro_appended():
     assert info["width"] == 1080 and info["height"] == 1920
 
 
+def test_bgm_spot_then_back_to_base():
+    """bgm_spots: the spot song plays for `dur`, the base fades out under it and comes back after."""
+    wd = tempfile.mkdtemp()
+    _vod(os.path.join(wd, "source.mp4"), 20, audio=None)
+    a, b = os.path.join(wd, "base.wav"), os.path.join(wd, "spot.wav")
+    _ff("-f", "lavfi", "-i", "sine=f=440:d=30", a)
+    _ff("-f", "lavfi", "-i", "sine=f=880:d=30", b)
+    r = render_clip(wd, {"id": "s", "format": "short", "start": 1, "end": 15, "trim_silence": False, "subs": [],
+                         "auto_se": False, "bgm": a, "bgm_spots": [{"at": 6, "bgm": b, "dur": 4}]},
+                    style(), glossary(), os.path.join(wd, "out", "s.mp4"), [])
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", r["out"], "-ac", "1", "-ar", "8000", "-f", "f32le", "-"],
+                         capture_output=True).stdout
+    x = np.frombuffer(pcm, np.float32)
+
+    def level(t, hz):
+        spec = np.abs(np.fft.rfft(x[int(t * 8000):int(t * 8000) + 4000]))
+        return spec[hz // 2 - 10:hz // 2 + 10].max()
+    assert level(2, 440) > 10 * level(2, 880)      # base only
+    assert level(7, 880) > 10 * level(7, 440)      # the spot (output 5..9 s), base faded out
+    assert level(11.5, 440) > 10 * level(11.5, 880)  # back to the base
+
+
 def test_silent_and_no_audio_sources_render():
     wd = tempfile.mkdtemp()
     _vod(os.path.join(wd, "source.mp4"), 20, audio=None)

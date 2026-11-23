@@ -84,6 +84,9 @@ or qc and point them to http://localhost:8765/.
 - BGM/SE/variety (owner, 2026-11-23): BGM is background only. Defaults are -27 dB for shorts and -30 dB for long
   videos; never raise them. Use `bgm_switch` only where the mood really flips. `bgm_rest: [[a, b]]` (source sec)
   fades the song out over fights or the pause before a punchline.
+  A long video's base `bgm` must be a `long_base` song from the music list (calm: chill, yurui, horror,
+  tension_kichi); otherwise the build stops. Energetic songs play as spots: `bgm_spots: [{at, bgm, dur, offset, db}]`
+  plays the song for `dur` s, and the base fades out under it and comes back after (owner 2026-11-23).
   SE come from `<work_root>/_素材/SE/効果音リスト.yaml` (効果音ラボ: monetized use OK and no credit needed;
   never redistribute the files or make SE-showcase videos). Auto SE rotate within each category per clip and
   are sparse: shorts get at most 6/min with a 3 s gap, long videos 2/min. To place one by hand:

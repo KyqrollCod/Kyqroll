@@ -423,9 +423,15 @@ def render_clip(wd, clip, st, gl, out_path, words):
 
         def _gain(name):   # songs from the music list are evened out to the built-in BGM's loudness
             return float((cat.get(str(name)) or {}).get("gain_db") or 0.0)
-        for nm in [bgm] + ([clip["bgm_switch"]["bgm"]] if clip.get("bgm_switch") else []):
+        for nm in [bgm] + ([clip["bgm_switch"]["bgm"]] if clip.get("bgm_switch") else []) + \
+                [sp["bgm"] for sp in clip.get("bgm_spots") or []]:
             if fmt != "short" and (cat.get(str(nm)) or {}).get("shorts_only"):
                 raise ValueError(f"{clip.get('id')}: 曲「{nm}」はショート専用です（横型には使えません。曲リストを参照）")
+        # Owner 2026-11-23: a long video's base song must be calm so the viewer can feel when things
+        # heat up; energetic songs (大慌て, おどれグロッケンシュピール, battle, jingles) are spots only.
+        if fmt != "short" and str(bgm) in cat and not cat[str(bgm)].get("long_base"):
+            raise ValueError(f"{clip.get('id')}: 曲「{bgm}」はスポット用です（横型の土台の曲は 曲リストの「横型の土台OK」から選び、"
+                             f"盛り上がる所だけ bgm_spots: [{{at, bgm, dur}}] で鳴らす）")
         db = float(clip.get('bgm_db', cfg.get('bgm_db', -22))) + _gain(bgm)
         # bgm_offset: start the track this many seconds in (a song's hook, not its intro).
         # bgm_switch {at: <source sec>, bgm, offset}: cross to a second track at the peak (転),
@@ -459,14 +465,34 @@ def render_clip(wd, clip, st, gl, out_path, words):
         # (a fight where the game audio carries it, a quiet beat before the punchline).
         rests = [(mp.to_out_clamped(float(a)), mp.to_out_clamped(float(b))) for a, b in clip.get("bgm_rest") or []]
         rests = [(a, b) for a, b in rests if b - a > 0.5]
+        # bgm_spots [{at, bgm, dur, offset, db}]: a spot song for `dur` seconds from `at` (source sec), then
+        # back to the base song. The base fades out under each spot, so only one song plays at a time.
+        spots = []
+        for sp in clip.get("bgm_spots") or []:
+            o = mp.to_out_clamped(float(sp["at"]))
+            d = min(float(sp.get("dur", 20)), dur - o)
+            if d > 1.5:
+                spots.append((o, d, sp))
+        rests += [(o + 0.4, o + d - 0.4) for o, d, _ in spots]
+        sp_labels = []
+        for k, (o, d, sp) in enumerate(spots):
+            inputs += ["-stream_loop", "-1", "-ss", f"{float(sp.get('offset', 0)):.3f}", "-i", _bgm_file(sp["bgm"])]
+            idx += 1
+            dbs = float(sp.get("db", clip.get("bgm_db", cfg.get("bgm_db", -22)))) + _gain(sp["bgm"])
+            g.append(f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=N/SR/TB,volume={dbs}dB,"
+                     f"atrim=duration={d:.3f},afade=t=in:d=0.5,afade=t=out:st={max(0.0, d - 1.0):.3f}:d=1.0,"
+                     f"adelay={int(o * 1000)}:all=1[bsp{k}]")
+            sp_labels.append(f"[bsp{k}]")
+        base = "bgmX"
         if rests:
             f = "*".join(f"(1-clip(min((t-{a - 0.8:.3f})/0.8\\,({b + 0.8:.3f}-t)/0.8)\\,0\\,1))" for a, b in rests)
             g.append(f"[bgmX]volume='{f}':eval=frame[bgmR]")
-            g.append("[ca2]asplit=2[cav][cak]")
-            g.append("[bgmR][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
-        else:
-            g.append("[ca2]asplit=2[cav][cak]")
-            g.append("[bgmX][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
+            base = "bgmR"
+        if sp_labels:
+            g.append(f"[{base}]{''.join(sp_labels)}amix=inputs={1 + len(sp_labels)}:normalize=0:duration=first[bgmS]")
+            base = "bgmS"
+        g.append("[ca2]asplit=2[cav][cak]")
+        g.append(f"[{base}][cak]sidechaincompress=threshold=0.008:ratio=12:attack=20:release=450:makeup=1[bgd]")
         voice, beds = "cav", ["[bgd]"]
         idx += 1
     if se_labels or beds:

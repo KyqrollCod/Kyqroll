@@ -562,7 +562,8 @@ def write_music(root):
         for s in lst:
             a = rel(s.get("file", ""))
             hook = s.get("hook_sec")
-            only = "<span class='tag warn'>ショート専用</span>" if s.get("shorts_only") else ""
+            only = ("<span class='tag warn'>ショート専用</span>" if s.get("shorts_only") else "") + \
+                ("<span class='tag'>横型の土台OK</span>" if s.get("long_base") else "<span class='tag'>スポット用（横型は bgm_spots で）</span>")
             where = (f"<a href='{_e(s.get('page'))}' target='_blank'>配布ページ</a>" if s.get("page")
                      else f"<span>{_e(s.get('source'))}</span>")
             player = f"<audio controls preload='none' src='{a}'></audio>" if a else ""
@@ -579,7 +580,7 @@ def write_music(root):
                 f"<span>{_e(s.get('license'))}</span></div></div>"
                 f"<div style='min-width:260px'>{player}{jump}</div></div>")
             md.append(f"| `{s['key']}` | {s['title']} / {s.get('artist')} | {s.get('scenes')} | {sec(hook)} | "
-                      f"{sec(s.get('duration'))} | {'【ショート専用】' if s.get('shorts_only') else ''}{s.get('note')} |")
+                      f"{sec(s.get('duration'))} | {'【ショート専用】' if s.get('shorts_only') else ''}{'【横型の土台OK】' if s.get('long_base') else '【スポット用】'}{s.get('note')} |")
         if not lst:
             parts.append("<div class='song empty'>まだ曲がありません</div>")
         parts.append("</section>")

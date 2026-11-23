@@ -131,7 +131,7 @@ long:
     相手: "#FFA040"
     読み上げ: "#A6E35A"
   auto_se: true
-  bgm: comical
+  bgm: chill_223am       # 横型の土台は落ち着いた曲（曲リストの「横型の土台OK」）。盛り上がる所は bgm_spots
   bgm_db: -30             # 横型はさらに控えめに（ゲーム音が主役）
   label:                  # 左上の常時ラベル（ゲーム名・局面など）
     x: 40
