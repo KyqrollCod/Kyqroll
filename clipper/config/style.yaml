@@ -7,18 +7,10 @@ font_impact: "Dela Gothic One"           # オチ・サムネ（assets/fonts/Del
 font_telop_file: MPLUSRounded1c-Black.ttf
 font_impact_file: DelaGothicOne-Regular.ttf
 fonts:                                     # key: [ファイル, フォント名]（すべて OFL。thumbnail_font / telop_font / hook_font で key を指定）
+  # オーナー 2026-11-23: 読みやすさ最優先。装飾・手書き・筆・立体・ドット系の書体は読みにくいので使わない（ここに載っていない書体は指定しても無視される）
   dela: [DelaGothicOne-Regular.ttf, Dela Gothic One]          # 極太ゴシック（従来のサムネ・オチ）
   mplus: [MPLUSRounded1c-Black.ttf, Rounded Mplus 1c Black]   # 丸ゴシック（従来のテロップ）
   zenkaku: [ZenKakuGothicNew-Black.ttf, Zen Kaku Gothic New Black]   # 角ゴシック極太（硬派・ニュース風）
-  rocknroll: [RocknRollOne-Regular.ttf, RocknRoll One]        # 丸くて力強い（ポップ）
-  reggae: [ReggaeOne-Regular.ttf, Reggae One]                 # 角ばった勢い（バトル・叫び）
-  mochiy: [MochiyPopOne-Regular.ttf, Mochiy Pop One]          # ぽってり可愛い
-  potta: [PottaOne-Regular.ttf, Potta One]                    # 筆っぽいポップ（ドタバタ）
-  rampart: [RampartOne-Regular.ttf, Rampart One]              # 立体の袋文字（目立つ見出し）
-  yusei: [YuseiMagic-Regular.ttf, Yusei Magic]                # マーカー手書き（ゆるい・小声）
-  kaisei: [KaiseiDecol-Bold.ttf, Kaisei Decol]                # 明朝系（ホラー・シリアス）
-  hachimaru: [HachiMaruPop-Regular.ttf, Hachi Maru Pop]       # 丸文字（かわいい）
-  dot: [DotGothic16-Regular.ttf, DotGothic16]                 # ドット（レトロゲーム）
   mplus1p: [MPLUS1p-Black.ttf, M PLUS 1p Black]              # 極太ゴシック（サムネの標準。読みやすさ最優先）
   zenmincho: [ZenOldMincho-Black.ttf, Zen Old Mincho Black]  # 極太明朝（シリアス・ドラマ風）
 
