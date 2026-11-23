@@ -217,6 +217,13 @@ def render_clip(wd, clip, st, gl, out_path, words):
         if sp:
             lines.append({**ln, "start": sp[0], "end": sp[1]})
 
+    if fmt == "short" and layout in ("avatar", "stack"):
+        base_av = dict(cfg.get("avatar") or {})
+        if layout == "stack":
+            base_av.update({k: v for k, v in (cfg.get("stack") or {}).items() if k in ("game_y", "hook_y", "subs_bottom_y", "badge")})
+        preset = (cfg.get("avatar_presets") or {}).get(clip.get("avatar_style") or "standard") or {}
+        clip = {**clip, "_av": {**base_av, **(preset if layout == "avatar" else {}), **(clip.get("avatar_cfg") or {})}}
+
     zooms = []
     for z in clip.get("zoom") or []:
         o = mp.to_out_clamped(float(z["at"]))
@@ -275,19 +282,38 @@ def render_clip(wd, clip, st, gl, out_path, words):
         g.append(_fill("cv2", clip.get("game_rect", sp["game"]), W, H - face_h, sw, sh, "game0"))
         g.append(_zoomed("game0", W, H - face_h, zooms, "game", tuple(clip.get("zoom_focus", (0.5, 0.5)))))
         g.append("[face][game]vstack=inputs=2,setsar=1[comp]")
-    elif layout == "avatar":
-        # Blurred game fills the canvas, the game itself sits in a band near the top, and the
-        # streamer's stand-in art overlaps the lower half, bobbing while she talks.
-        av = cfg["avatar"]
-        g.append("[cv]split=2[cvb][cvg]")
+    elif layout in ("avatar", "stack"):
+        # avatar: blurred game fills the canvas, the game itself sits in a band near the top, and the
+        # streamer's stand-in art overlaps the lower half. `avatar_style` picks a preset composition
+        # (standard / big_game / left / small) so a stream's Shorts don't all look the same.
+        # stack: the whole game on top and a zoomed detail of it (`stack_focus` [x, y, w, h], 0..1)
+        # filling the lower panel: the HUD, a kill feed, a character, the scoreboard.
+        av = clip["_av"]
+        g.append("[cv]split=3[cvb][cvg][cvd]" if layout == "stack" else "[cv]split=2[cvb][cvg]")
         g.append(f"[cvb]scale={W}:{H}:force_original_aspect_ratio=increase:flags=bilinear,crop={W}:{H},"
                  f"boxblur={av['bg_blur']}:2,eq=brightness=-{av['bg_dim']},setsar=1[bgv]")
         vw, vh = W, int(W * sh / sw) // 2 * 2
-        g.append(f"[cvg]scale={vw}:{vh}:flags=lanczos,setsar=1[gv0]")
+        gz = float(av.get("game_zoom", 1.0))
+        if gz > 1.0:   # a taller game band: scale up and trim the sides
+            zh = int(vh * gz) // 2 * 2
+            g.append(f"[cvg]scale=-2:{zh}:flags=lanczos,crop={W}:{zh},setsar=1[gv0]")
+            vh = zh
+        else:
+            g.append(f"[cvg]scale={vw}:{vh}:flags=lanczos,setsar=1[gv0]")
         g.append(_zoomed("gv0", vw, vh, zooms, "gv", tuple(clip.get("zoom_focus", (0.5, 0.5)))))
         g.append(f"[bgv][gv]overlay=0:{av['game_y']}[comp0]")
-        cur_av = "comp0"
-        art = clip.get("avatar")
+        if layout == "stack":
+            stk = cfg["stack"]
+            py, ph = int(stk["panel_y"]), int(stk["panel_h"])
+            g.append(_fill("cvd", clip.get("stack_focus", stk["focus"]), W - 2 * int(stk["margin"]), ph, sw, sh, "det0"))
+            g.append(f"[det0]drawbox=x=0:y=0:w=iw:h=ih:color={stk['frame_color']}:t=6[det]")
+            g.append(f"[comp0][det]overlay={int(stk['margin'])}:{py}[compS]")
+            g.append("[compS]null[comp0s]")
+            cur_stack = "comp0s"
+        else:
+            cur_stack = "comp0"
+        cur_av = cur_stack
+        art = clip.get("avatar") if layout == "avatar" or clip.get("stack_avatar") else None
         if art:
             inputs += ["-loop", "1", "-i", _asset(art, "images")]
             idx_av = len([x for x in inputs if x == "-i"]) - 1
@@ -297,8 +323,9 @@ def render_clip(wd, clip, st, gl, out_path, words):
             y0 = H - ah + int(av["bottom_overflow"])
             bob = float(av.get("talk_bob", 0))
             yexpr = f"{y0}-{bob}*abs(sin(2*PI*3.2*t))*min(1\\,{talk})" if bob else str(y0)
-            g.append(f"[{idx_av}:v]scale=-1:{ah}:flags=lanczos,format=rgba[avi]")
-            g.append(f"[comp0][avi]overlay=x={av['x']}:y='{yexpr}':eval=frame:shortest=1[comp1]")
+            flip = ",hflip" if av.get("flip") else ""
+            g.append(f"[{idx_av}:v]scale=-1:{ah}:flags=lanczos,format=rgba{flip}[avi]")
+            g.append(f"[{cur_stack}][avi]overlay=x={av['x']}:y='{yexpr}':eval=frame:shortest=1[comp1]")
             cur_av = "comp1"
         # Partner / chat-TTS badges while they speak (left side, clear of the YouTube UI).
         badges = []
@@ -637,6 +664,36 @@ def add_opening(main_path, report, intro, out_path, st, teaser=True):
     report["line_times"] = {k: round(v + opening, 2) for k, v in report.get("line_times", {}).items()}
     return out_path
 
+
+
+def add_outro(main_path, report, outro, out_path, st):
+    """Shorts: append the end card (e.g. 「Twitchで配信中！」) after the punchline. The card is scaled
+    to the Short's canvas and frame rate; the joined video is loudness-normalized as a whole."""
+    if not (outro and os.path.exists(outro)):
+        return None
+    enc = st["encode"]
+    info = media_info(main_path)
+    W, H, fps = info["width"], info["height"], report.get("fps") or 60
+    g = [f"[0:v]fps={fps},format=yuv420p,setsar=1[mv]", "[0:a]aformat=channel_layouts=stereo[ma]",
+         f"[1:v]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,"
+         f"fps={fps},format=yuv420p,setsar=1[ov]",
+         f"[1:a]aresample=48000,aformat=channel_layouts=stereo,loudnorm=I={st['audio']['lufs']}:"
+         f"TP={st['audio']['true_peak']}[oa]",
+         "[mv][ma][ov][oa]concat=n=2:v=1:a=1[v][a]"]
+    tmp_out = out_path + ".tmp.mp4"
+    venc = ["-c:v", enc["encoder"]]
+    if enc["encoder"] == "libx264":
+        venc += ["-preset", os.environ.get("CLIPPER_PRESET", enc["preset"]), "-crf", str(enc["crf"]), *_vbv(enc),
+                 "-threads", str(max(2, (os.cpu_count() or 8) // 2))]
+    run([need("ffmpeg"), "-y", "-hide_banner", "-i", main_path, "-i", outro, "-filter_complex", ";".join(g),
+         "-map", "[v]", "-map", "[a]", *venc, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", enc["audio_bitrate"],
+         "-movflags", "+faststart", tmp_out])
+    normalize_loudness(tmp_out, out_path + ".norm.mp4", st)
+    os.remove(tmp_out)
+    replace_when_free(out_path + ".norm.mp4", out_path)
+    extra = media_info(out_path)["duration"] - info["duration"]
+    report.update(outro=round(extra, 2), duration=round(report["duration"] + extra, 2))
+    return out_path
 
 def load_words(wd):
     p = os.path.join(wd, "transcript.json")

@@ -90,6 +90,21 @@ def test_variety_effects_and_bgm_rest():
     assert level(11.5) > 20 * level(7.0)   # and comes back after
 
 
+def test_short_outro_appended():
+    from clipper.render import add_outro
+    wd = tempfile.mkdtemp()
+    _vod(os.path.join(wd, "source.mp4"), 12)
+    card = os.path.join(wd, "card.mp4")
+    _ff("-f", "lavfi", "-i", "color=c=purple:s=540x960:r=30:d=3", "-f", "lavfi", "-i", "sine=f=660:d=3", "-shortest", card)
+    r = render_clip(wd, {"id": "o", "format": "short", "start": 1, "end": 9, "trim_silence": False, "subs": []},
+                    style(), glossary(), os.path.join(wd, "out", "o.mp4"), [])
+    d0 = r["duration"]
+    add_outro(r["out"], r, card, r["out"], style())
+    info = media_info(r["out"])
+    assert abs(info["duration"] - (d0 + 3)) < 0.3 and abs(r["duration"] - info["duration"]) < 0.2, (d0, info, r)
+    assert info["width"] == 1080 and info["height"] == 1920
+
+
 def test_silent_and_no_audio_sources_render():
     wd = tempfile.mkdtemp()
     _vod(os.path.join(wd, "source.mp4"), 20, audio=None)

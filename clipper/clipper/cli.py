@@ -141,12 +141,22 @@ def cmd_render(a):
             if intro or c.get("teaser", True):
                 from .render import add_opening
                 add_opening(out, r, intro, out, st, teaser=c.get("teaser", pkg.get("teaser", True)))
+        if c.get("format", "short") == "short" and c.get("outro", pkg.get("outro", True)) is not False:
+            # End card after every Short (owner 2026-11-23: 「Twitchで配信中！」 like the long intro).
+            from .common import default_work_root
+            card = c.get("outro_file") or pkg.get("short_outro") or os.path.join(
+                default_work_root(), "_素材", "共通", "アウトロ_ショート.mp4")
+            if os.path.exists(card):
+                from .render import add_outro
+                add_outro(out, r, card, out, st)
         if prog:
             prog.done(f"r:{c['id']}", f"{r['duration']}秒")
         if c.get("format") == "long" and c.get("thumbnail_text"):
             r["thumbnail"] = make_thumbnail(c.get("source") or source_path(wd), float(c.get("thumbnail_at", c["start"])),
                                             c["thumbnail_text"], st, os.path.join(out_dir, f"{c['id']}_thumb.jpg"),
-                                            c.get("thumbnail_sticker"))
+                                            c.get("thumbnail_sticker"), style=c.get("thumbnail_style"),
+                                            avatar=c.get("avatar") or pkg.get("avatar"), focus=c.get("thumbnail_focus"),
+                                            seed=f"{os.path.basename(wd)}:{c['id']}")
         reports.append(r)
         print(f"  {r['id']}: {r['duration']}s ({r['segments']} segments, -{r['removed_sec']}s) -> {out}")
     _merge_json(os.path.join(out_dir, "render.json"), reports, lambda r: r["id"])

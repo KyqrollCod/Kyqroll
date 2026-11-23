@@ -90,6 +90,15 @@ or qc and point them to http://localhost:8765/.
   `se: [{at, cat|key}]`. The se.html page lists them.
   Variety tools: script prefixes `*` emph / `!` shout (red, bigger, tilted bounce) / `~` whisper (small,
   faint); zoom `style: punch|push|shake` with a per-zoom `focus: [x, y]`; `flash: [sec]`; per-clip `layout`.
+- Patterns (owner, 2026-11-23: one pattern doesn't widen the audience, so show many patterns first):
+  - Shorts composition `avatar_style: standard|big_game|left|small`, or `layout: stack` with
+    `stack_focus: [x, y, w, h]` (whole game on top, a zoomed detail below). Set `layout_fixed: true` so
+    package.short_layout doesn't override it.
+  - Thumbnails `thumbnail_style: band|bottom|punch|avatar|zoom|bubble`. If unset, it is picked from
+    stream+clip id. `thumbnail_focus` sets the zoom point.
+  - Shorts may run past 60 s. Every Short gets the end card `<work_root>/_素材/共通/アウトロ_ショート.mp4`
+    (「Twitchで配信中！」, made by the stream-intro session) appended when the file exists
+    (`outro: false` per clip/package to skip).
 - Publishing handoff: `python -m clipper ready <wd>` writes out/ready.json only when every clip
   passed qc. The upload session records uploads in out/published.json.
 - Long videos open with up to 3 punchlines (≤8 s), then the channel intro (`long_intro` in

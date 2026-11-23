@@ -380,7 +380,8 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
                               f"{{\\pos({cx},{b['y'] + b['h'] // 2})}}{_esc(clip['band_text'])}"))
         if clip.get("hook"):
             hook_lines = wrap(clip["hook"], hk["max_chars_per_line"], 2)
-            hy = (cfg.get("avatar") or {}).get("hook_y", hk["y"]) if layout == "avatar" else hk["y"]
+            av = clip.get("_av") or cfg.get("avatar") or {}
+            hy = av.get("hook_y", hk["y"]) if layout in ("avatar", "stack") else hk["y"]
             doc.append(_event(5, 0, duration, "Hook",
                               f"{{\\pos({cx},{hy})}}" + "\\N".join(_esc(x) for x in hook_lines)))
         if layout == "letterbox":
@@ -393,8 +394,8 @@ def build_ass(fmt, st, clip, lines_out, duration, layout):
         doc.append(_event(5, 0, duration, "Label", f"{{\\pos({lb['x']},{lb['y']})}}{_esc(clip['label'])}"))
 
     bottom = sc["bottom_y"]
-    if layout == "avatar":
-        bottom = (cfg.get("avatar") or {}).get("subs_bottom_y", bottom)
+    if layout in ("avatar", "stack"):
+        bottom = (clip.get("_av") or cfg.get("avatar") or {}).get("subs_bottom_y", bottom)
     for ln in lines_out:
         rows = wrap(ln["text"], sc["max_chars_per_line"], sc["max_lines"])
         body = "\\N".join(_esc(r) for r in rows)

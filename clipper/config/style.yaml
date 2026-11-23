@@ -71,6 +71,21 @@ short:
     badge: {x: 36, y: 1290, size: 230}   # 共演者・コメント読み上げのアイコン位置（左側）
     bg_blur: 26
     bg_dim: 0.32
+  avatar_presets:         # avatar_style: で選ぶ構図（オーナー 2026-11-23: 構図のバリエーションを増やす）
+    standard: {}          # ゲーム上・立ち絵右下に大きく
+    big_game: {game_zoom: 1.3, game_y: 300, height: 760, x: 470, subs_bottom_y: 1330, badge: {x: 36, y: 1380, size: 210}}   # ゲームを大きく、立ち絵は小さめ
+    left: {x: -190, badge: {x: 690, y: 1290, size: 230}}   # 立ち絵を左に（反転はしない。flip: true で反転も可）
+    small: {game_y: 430, height: 620, x: 560, bottom_overflow: 40, hook_y: 110, subs_bottom_y: 1330, badge: {x: 36, y: 1380, size: 210}}   # ゲーム中央・立ち絵は右下に小さく
+  stack:                  # layout: stack（上にゲーム全体、下にゲームの一部を拡大した窓）
+    game_y: 250
+    panel_y: 900
+    panel_h: 620
+    margin: 40
+    focus: [0.30, 0.25, 0.40, 0.50]   # 拡大する範囲 [x, y, w, h]（0〜1）。クリップの stack_focus で指定
+    frame_color: "#37E0FF"
+    hook_y: 40
+    subs_bottom_y: 1500
+    badge: {x: 36, y: 1290, size: 230}
   auto_se: true           # 強調行=pop、ズーム=whoosh、keep=impact、読み上げ=ding を自動で付ける
   bgm: comical            # comical / tension / none（clips.src.yaml の package.bgm やクリップの bgm で上書き）
   bgm_db: -27             # BGM の音量（オーナー 2026-11-23: あくまで背景。声が出ている間はさらに自動で下がる）
