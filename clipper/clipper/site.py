@@ -506,7 +506,17 @@ def write_tasks(root):
                + "".join(f"<tr><td>{i + 1}</td><td><span class='tag {c}'>{k}</span></td><td>{_e(x.get('date'))}</td>"
                          f"<td>{_e(x.get('title'))}</td><td>{'済' if x.get('prepared') else '準備中'}</td></tr>"
                          for i, (x, k, c) in enumerate(eq_rows[:12])) + "</table>") if eq_rows else ""
-    body = (f"<h2>いま動いている処理</h2>{run_html}{hold_html}{eq_html}"
+    # Fixed versions waiting to replace uploaded videos (owner 2026-11-25: swap later, track the state).
+    sw = _lj(os.path.join(root, "_投稿", "差し替え待ち.json"), {}) or {}
+    sw_items = sw.get("items") or []
+    tag = {"書き直し中": "", "準備済み": "ok", "差し替え済み": "ok", "不合格": "warn"}
+    sw_html = ("<h2>差し替え待ち（修正版の準備。差し替えはオーナーの合図で）</h2>"
+               f"<div class='banner'>{_e(sw.get('policy', ''))}</div>"
+               "<table class='tbl'><tr><th>予約・公開</th><th>ゲーム</th><th>クリップ</th><th>理由</th><th>状態</th><th>差し替えの目安</th></tr>"
+               + "".join(f"<tr><td>{_e(x.get('scheduled'))}</td><td>{_e(x.get('game'))}</td><td>{_e(x.get('stream_day'))} {_e(x.get('clip'))}</td>"
+                         f"<td>{_e(x.get('reason'))}</td><td><span class='tag {tag.get(x.get('status'), '')}'>{_e(x.get('status'))}</span></td>"
+                         f"<td>{_e(x.get('earliest_swap'))}</td></tr>" for x in sw_items) + "</table>") if sw_items else ""
+    body = (f"<h2>いま動いている処理</h2>{run_html}{hold_html}{eq_html}{sw_html}"
             "<h2>配信ごとの段階（準備 → 編集 → 品質チェック → 投稿待ち → 予約）</h2>"
             "<table class='tbl'><tr><th>配信日</th><th>配信</th><th>段階</th><th>合格</th><th>最初の公開予定</th></tr>"
             + "".join(board) + "</table>"

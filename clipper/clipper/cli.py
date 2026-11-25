@@ -141,11 +141,14 @@ def cmd_render(a):
             if intro or c.get("teaser", True):
                 from .render import add_opening
                 add_opening(out, r, intro, out, st, teaser=c.get("teaser", pkg.get("teaser", True)))
-        if c.get("format", "short") == "short" and c.get("outro", pkg.get("outro", True)) is not False:
-            # End card after every Short (owner 2026-11-23: 「Twitchで配信中！」 like the long intro).
+        if c.get("outro", pkg.get("outro", True)) is not False:
+            # End card after every video. Shorts: 「Twitchで配信中！」 (owner 2026-11-23). Long videos:
+            # 「ご視聴ありがとう」 with two video frames + a subscribe circle where the YouTube end-screen
+            # elements go (owner 2026-11-26; positions in _運用方針.md).
             from .common import default_work_root
-            card = c.get("outro_file") or pkg.get("short_outro") or os.path.join(
-                default_work_root(), "_素材", "共通", "アウトロ_ショート.mp4")
+            is_short = c.get("format", "short") == "short"
+            card = c.get("outro_file") or pkg.get("short_outro" if is_short else "long_outro") or os.path.join(
+                default_work_root(), "_素材", "共通", "アウトロ_ショート.mp4" if is_short else "アウトロ_横型.mp4")
             if os.path.exists(card):
                 from .render import add_outro
                 add_outro(out, r, card, out, st)
