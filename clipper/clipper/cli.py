@@ -221,6 +221,13 @@ def cmd_qc(a):
             r = check(path, c.get("format", "short"), st, ass,
                       os.path.join(out_dir, f"{c['id']}_sheet.png"), getattr(a, "asr", None),
                       opening=float((reports.get(c["id"]) or {}).get("opening") or 0.0))
+        gmr = (reports.get(c["id"]) or {}).get("game_music") or {}
+        if gmr:   # strict BGM overlap: our BGM must not have played over the game's own music
+            off = gmr.get("mode") == "off"
+            r["checks"].append({"name": "bgm_vs_game_music", "ok": not off, "hard": False,
+                                "detail": f"ゲーム内の曲 {gmr.get('cover', 0) * 100:.0f}%・"
+                                          + ("後付けBGMなし" if gmr.get("bgm_dropped") else
+                                             "曲の区間は後付けBGMを止めた" if not off else "検査オフ（重なりの可能性）")})
         results.append(r)
         ok &= r["pass"]
         bad = [f"{x['name']}: {x['detail']}" for x in r["checks"] if not x["ok"]]
@@ -506,6 +513,28 @@ def _twitch_archives(login):
     return [(e["node"]["id"], e["node"]["title"], e["node"]["createdAt"], e["node"]["status"] == "RECORDING") for e in edges]
 
 
+def record_followers(root, login):
+    """_状況/twitch_followers.json: [{at, followers}] — one row per hour at most. The channel's KPI is
+    inflow to Twitch (owner 2026-11-25), so the follower count is tracked next to the uploads."""
+    import datetime as _dt
+    import json as _json
+    import urllib.request
+    q = "query($l: String!) { user(login: $l) { followers { totalCount } } }"
+    req = urllib.request.Request("https://gql.twitch.tv/gql", data=_json.dumps({"query": q, "variables": {"l": login}}).encode(),
+                                 headers={"Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        n = (((_json.loads(r.read())["data"]["user"] or {}).get("followers")) or {}).get("totalCount")
+    if n is None:
+        return None
+    path = os.path.join(root, "_状況", "twitch_followers.json")
+    rows = load_json(path) if os.path.exists(path) else []
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    if not rows or rows[-1]["at"][:13] != now[:13]:
+        rows.append({"at": now, "followers": int(n)})
+        save_json(path, rows)
+    return int(n)
+
+
 def write_edit_queue(root, fresh_days=3):
     """_状況/編集待ち.json: streams that are prepared but not edited yet. Fresh streams (≤ fresh_days
     old) come first, newest first; older ones are stock. Owner 2026-11-22: new streams cut in line."""
@@ -551,6 +580,11 @@ def cmd_watch(a):
             for vid, title, *_ in todo:
                 print(f"  取得開始: {title} ({vid})", flush=True)
                 subprocess.run([sys.executable, "-m", "clipper", "prepare", f"https://www.twitch.tv/videos/{vid}"])
+            try:
+                fol = record_followers(root, login)
+                print(f"  Twitch フォロワー: {fol}", flush=True)
+            except Exception as fe:
+                print(f"  フォロワー数の取得に失敗: {fe}", flush=True)
             q = write_edit_queue(root)
             print(f"  編集待ち: 新着 {len(q['fresh'])}本・ストック {len(q['stock'])}本", flush=True)
         except Exception as e:  # noqa: BLE001 — a network hiccup must not stop the watch

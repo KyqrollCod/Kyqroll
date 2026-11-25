@@ -110,6 +110,13 @@ or qc and point them to http://localhost:8765/.
     Shorts take
     `telop_font`, `hook_font`, `telop_outline: [outer, inner]` and `hook_colors: [fill, outline]`.
     Speaker fill colours stay fixed.
+- Growth rules (2026-11-25, `<work_root>/_運用方針.md`):
+  - Render runs AST on the source and rests our BGM wherever the game plays its own music. If that covers
+    ≥50% of a clip, no BGM is added (`game_music: auto`; qc row `bgm_vs_game_music`).
+  - Shorts trim a leading filler or pause (`trim_lead_filler`, ≤3 s; `lead_trim: false` turns it off).
+  - `watch` logs the Twitch follower count to `_状況/twitch_followers.json`.
+  - Editing rules: Shorts run 20–35 s and split double peaks; the title hook goes in the first 20 chars,
+    ≤40 chars total, without spoiling the punchline.
 - Publishing handoff: `python -m clipper ready <wd>` writes out/ready.json only when every clip
   passed qc. The upload session records uploads in out/published.json.
 - Long videos open with up to 3 punchlines (≤8 s), then the channel intro (`long_intro` in

@@ -68,7 +68,7 @@ pre.code{background:#11141a;border:1px solid var(--line);border-radius:8px;paddi
 """
 
 NAV = [("tasks.html", "動いているタスク"), ("index.html", "動画一覧"), ("music.html", "曲リスト"), ("se.html", "効果音"),
-       ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順")]
+       ("_投稿/", "投稿の記録"), ("_編集手順.md", "編集手順"), ("_運用方針.md", "運用方針")]
 
 
 def _nav(active):

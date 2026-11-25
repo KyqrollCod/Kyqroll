@@ -182,9 +182,39 @@ def source_silences(src, start, end, noise="-45dB", min_dur=1.0):
         out.append((start + e - d, d))
     return out
 
+_FILLER = re.compile(r"^(?:(?:えー+と?|えっと|えと|あー+|あ+|あの+ー*|うーん|うん+|まあ|まぁ|んー+|なんか)[、。,.\s！？!?ー〜]*)+")
+
+
+def trim_lead_filler(clip, words, max_skip=3.0, min_left=10.0):
+    """Shorts open on content (owner 2026-11-25, from the Gemini review): when the first words after
+    `start` are only filler (えっと / あー / うん / まあ …) or silence, move `start` to 0.2 s before
+    the first real word. Never more than `max_skip` seconds and never below `min_left` seconds left.
+    Returns the new start (unchanged when nothing to trim)."""
+    a, b = float(clip["start"]), float(clip["end"])
+    toks = [w for w in words if a - 0.05 <= float(w["start"]) < a + max_skip + 2]
+    if not toks:
+        return a
+    text, owner = "", []
+    for k, w in enumerate(toks):
+        t = str(w.get("word", "")).strip()
+        text += t
+        owner += [k] * len(t)
+    m = _FILLER.match(text)
+    k = owner[m.end()] if m and m.end() < len(owner) else 0
+    first = float(toks[k]["start"])
+    new = max(a, first - 0.2)
+    if new - a < 0.4 or new - a > max_skip or b - new < min_left:
+        return a
+    return round(new, 3)
+
 
 def render_clip(wd, clip, st, gl, out_path, words):
     fmt = clip.get("format", "short")
+    if fmt == "short" and clip.get("lead_trim", True) and words and not clip.get("segments"):
+        new = trim_lead_filler(clip, words)
+        if new != float(clip["start"]):
+            print(f"  {clip.get('id')}: 冒頭のつなぎ言葉・間を {new - float(clip['start']):.1f}秒カット")
+            clip = {**clip, "start": new, "_lead_trimmed": round(new - float(clip["start"]), 2)}
     cfg = st[fmt]
     W, H = cfg["size"]
     src = clip.get("source") or source_path(wd)
@@ -414,6 +444,24 @@ def render_clip(wd, clip, st, gl, out_path, words):
     # 6) BGM under everything, ducked by the voice (sidechain) so speech always wins.
     voice, beds = "ca2", []
     bgm = clip.get("bgm", cfg.get("bgm"))
+    # Game's own music (owner 2026-11-25: check BGM overlap strictly). AST tags the source in 1 s hops.
+    # auto: our BGM rests wherever the game already plays music; when that covers half the clip or
+    # more, no BGM is added at all (the game's music is the bed). off: no check (not recommended).
+    gm_mode = str(clip.get("game_music", cfg.get("game_music", "auto")))
+    game_music = {"mode": gm_mode, "cover": 0.0, "spans_out": [], "bgm_dropped": False}
+    if bgm and str(bgm).lower() != "none" and gm_mode == "auto":
+        from .gamemusic import music_spans
+        spans = []
+        for a_, b_ in music_spans(wd, src, float(clip["start"]), float(clip["end"])):
+            oa, ob = mp.to_out_clamped(float(a_)), mp.to_out_clamped(float(b_))
+            if ob - oa > 0.8:
+                spans.append((oa, ob))
+        cover = sum(b_ - a_ for a_, b_ in spans) / max(dur, 1.0)
+        game_music.update(cover=round(cover, 3), spans_out=[[round(a_, 2), round(b_, 2)] for a_, b_ in spans])
+        if cover >= float(cfg.get("game_music_max_cover", 0.5)):
+            game_music["bgm_dropped"] = True
+            print(f"  {clip.get('id')}: ゲーム内の曲が {cover * 100:.0f}% → 後付けBGMなし（ゲームの曲を活かす）")
+            bgm = None
     if bgm and str(bgm).lower() != "none":
         from .audiogen import bgm_path
 
@@ -467,12 +515,17 @@ def render_clip(wd, clip, st, gl, out_path, words):
         # (a fight where the game audio carries it, a quiet beat before the punchline).
         rests = [(mp.to_out_clamped(float(a)), mp.to_out_clamped(float(b))) for a, b in clip.get("bgm_rest") or []]
         rests = [(a, b) for a, b in rests if b - a > 0.5]
+        rests += [tuple(x) for x in game_music["spans_out"]]   # never over the game's own music
         # bgm_spots [{at, bgm, dur, offset, db}]: a spot song for `dur` seconds from `at` (source sec), then
         # back to the base song. The base fades out under each spot, so only one song plays at a time.
         spots = []
         for sp in clip.get("bgm_spots") or []:
             o = mp.to_out_clamped(float(sp["at"]))
             d = min(float(sp.get("dur", 20)), dur - o)
+            clash = sum(max(0.0, min(o + d, b_) - max(o, a_)) for a_, b_ in game_music["spans_out"])
+            if clash > 0.3 * d:
+                print(f"  {clip.get('id')}: スポット曲 {sp['bgm']}（{o:.0f}秒〜）はゲーム内の曲と重なるので鳴らさない")
+                continue
             if d > 1.5:
                 spots.append((o, d, sp))
         rests += [(o + 0.4, o + d - 0.4) for o, d, _ in spots]
@@ -534,7 +587,7 @@ def render_clip(wd, clip, st, gl, out_path, words):
     normalize_loudness(stage1, part, st)
     replace_when_free(part, out_path)
 
-    report = {"id": clip.get("id"), "format": fmt, "layout": layout, "out": out_path,
+    report = {"id": clip.get("id"), "format": fmt, "layout": layout, "out": out_path, "game_music": game_music,
               "duration": round(dur, 2), "segments": len(ranges),
               "removed_sec": round(float(clip["end"]) - float(clip["start"]) - dur, 2),
               "lines": len(lines), "fps": fps}
