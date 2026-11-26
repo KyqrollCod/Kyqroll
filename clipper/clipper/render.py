@@ -618,7 +618,7 @@ def normalize_loudness(src, dst, st):
     # setting cannot satisfy both, so: encode, measure the result, correct the gain, repeat.
     lim = 10 ** ((au["true_peak"] - 0.5) / 20)
     gain, target = 0.0, float(au["lufs"])
-    for _ in range(3):
+    for _ in range(5):   # 2026-11-27: 3 rounds of ±3 dB were not always enough (a long ended at -17 LUFS)
         run([need("ffmpeg"), "-y", "-hide_banner", "-i", src, "-c:v", "copy", "-af",
              # limit at 4x the sample rate: catches inter-sample peaks that AAC would turn into overs
              f"{ln}volume={gain:.2f}dB,aresample=192000,alimiter=limit={lim:.3f}:level=false:attack=2:release=60,"
@@ -628,7 +628,7 @@ def normalize_loudness(src, dst, st):
             break
         if tp > -1.1:
             lim *= 10 ** ((-1.2 - tp) / 20)          # peaks over: limit harder
-        gain += max(-3.0, min(3.0, target - i_lufs))  # loudness off: correct the gain
+        gain += max(-6.0, min(6.0, target - i_lufs))  # loudness off: correct the gain
     return dst
 
 
