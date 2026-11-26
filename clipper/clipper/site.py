@@ -333,6 +333,7 @@ def write_ready(wd):
             "id": r["id"], "format": r["format"], "duration": round(r["dur"] or 0, 1),
             "file": os.path.join(out, f"{r['id']}.mp4"),
             "thumbnail": os.path.join(out, f"{r['id']}_thumb.jpg") if r["thumb"] else None,
+            "cover": (lambda p: p if os.path.exists(p) else None)(os.path.join(out, f"{r['id']}_cover.jpg")),
             "title": r["title"], "description": r["desc"], "hashtags": r["tags"], "credit": r["credit"], "collab": r.get("collab"),
         } for r in rows],
     }

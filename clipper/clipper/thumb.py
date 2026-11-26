@@ -241,17 +241,17 @@ def _vignette(img):
     return Image.composite(img, Image.new("RGB", (W, H), (0, 0, 0)), m)
 
 
-def _sticker(img, art_path, dz, right=True):
+def _sticker(img, art_path, dz, right=True, height=None, bottom=0.10):
     """The streamer's art as a cut-out sticker: white outline + soft shadow, big on one side."""
     from PIL import ImageFilter
     W, H = img.size
     art = Image.open(art_path).convert("RGBA")
-    r = (H * 1.12) / art.height
+    r = (height or H * 1.12) / art.height
     art = art.resize((int(art.width * r), int(art.height * r)), Image.LANCZOS)
     a = art.split()[3]
     edge = a.filter(ImageFilter.MaxFilter(17))
     x = W - int(art.width * 0.80) if right else -int(art.width * 0.2)
-    y = H - art.height + int(H * 0.10)
+    y = H - art.height + int(H * bottom)
     sh = Image.new("RGBA", art.size, (0, 0, 0, 0))
     sh.putalpha(edge.filter(ImageFilter.GaussianBlur(10)).point(lambda v: int(v * 0.6)))
     img.alpha_composite(sh, (x + 8, y + 10))
@@ -358,3 +358,29 @@ def _tag(img, dz):
     w = int(d.textlength(txt, font=f))
     d.rounded_rectangle([18, 16, 18 + w + 30, 16 + 46], radius=10, fill=dz["accent"])
     d.text((18 + 15, 16 + 23), txt, font=f, fill="#FFFFFF", anchor="lm")
+
+
+def make_short_cover(src, t, text, st, out_path, avatar=None, seed="", palette=None, font=None):
+    """Vertical cover for a Short (1080x1920), in the same family as the long thumbnails: the payoff
+    frame zoomed to fill, a huge outlined headline (the hook, key word in 『』 as a gradient) in the
+    upper third, the streamer's art as a sticker bottom-right, the channel tag. Owner 2026-11-26:
+    the Short's thumbnail must show what the clip is and stand out (not the Twitch end card)."""
+    from PIL import ImageEnhance
+    W, H = 1080, 1920
+    dz = design(st, seed, font, palette, "caption")
+    img = _cover(lift_dark(grab_frame(src, t)), W, H)
+    img = ImageEnhance.Color(img).enhance(1.25)
+    img = ImageEnhance.Contrast(img).enhance(1.08).convert("RGBA")
+    # darken the top for the headline and the bottom for the sticker
+    g = Image.linear_gradient("L")
+    top = g.rotate(180).resize((W, int(H * 0.45))).point(lambda v: int(v * 0.75))
+    img.alpha_composite(Image.merge("RGBA", (*[Image.new("L", top.size, 0)] * 3, top)), (0, 0))
+    _shade(img, "bottom")
+    lines = _lines(str(text).replace("\\n", "\n"), 3, split_at=6)
+    f, size = _fit(dz, lines, W - 70, int(H * 0.30), 230)
+    _block(img, lines, f, size, dz, W // 2, int(H * 0.08) + int(size * 1.08 * len(lines)), anchor="md")
+    if avatar and os.path.exists(avatar):
+        _sticker(img, avatar, dz, right=True, height=H * 0.42, bottom=0.04)
+    _tag(img, {**dz, "font": dz["font"]})
+    img.convert("RGB").save(out_path, quality=92)
+    return out_path

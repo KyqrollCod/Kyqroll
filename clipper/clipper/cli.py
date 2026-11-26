@@ -154,6 +154,21 @@ def cmd_render(a):
                 add_outro(out, r, card, out, st)
         if prog:
             prog.done(f"r:{c['id']}", f"{r['duration']}秒")
+        if c.get("format", "short") == "short" and (c.get("cover_text") or c.get("hook")):
+            # Vertical cover for the Short (owner 2026-11-26: thumbnail must show the content, not the
+            # Twitch end card). Frame: cover_at, else the first zoom (the payoff), else the middle.
+            from .thumb import make_short_cover
+            zs = c.get("zoom") or []
+            t_cov = c.get("cover_at") or (zs[0].get("at") if zs and isinstance(zs[0], dict) else None) or \
+                (float(c["start"]) + float(c["end"])) / 2
+            try:
+                r["cover"] = make_short_cover(c.get("source") or source_path(wd), float(t_cov),
+                                              c.get("cover_text") or c["hook"], st,
+                                              os.path.join(out_dir, f"{c['id']}_cover.jpg"),
+                                              avatar=c.get("avatar") or pkg.get("avatar"),
+                                              seed=f"{os.path.basename(wd)}:{c['id']}")
+            except Exception as e:   # a cover must never fail the build
+                print(f"  {c['id']}: 表紙を作れませんでした（{e}）")
         if c.get("format") == "long" and c.get("thumbnail_text"):
             r["thumbnail"] = make_thumbnail(c.get("source") or source_path(wd), float(c.get("thumbnail_at", c["start"])),
                                             c["thumbnail_text"], st, os.path.join(out_dir, f"{c['id']}_thumb.jpg"),
