@@ -115,7 +115,7 @@ def auto_se(clip, lines, zooms, mp, st, fmt="short", taken=()):
     from .audiogen import SE_LEVEL, se_pick
     cfg = st[fmt]
     min_gap = float(cfg.get("se_min_gap", 3.0 if fmt == "short" else 6.0))
-    per_min = float(cfg.get("se_per_min", 6 if fmt == "short" else 2))
+    per_min = float(cfg.get("se_per_min", 4 if fmt == "short" else 2))
     cues = []
     for z in zooms:
         cues.append((max(0.0, z["out_start"] - 0.18), "whoosh", 1))
@@ -127,8 +127,7 @@ def auto_se(clip, lines, zooms, mp, st, fmt="short", taken=()):
             cues.append((max(0.0, ln["start"] - 0.45), "read", 2))
         elif ln.get("tone") == "shout":
             cues.append((ln["start"], "surprise", 0))
-        elif ln.get("emph"):
-            cues.append((ln["start"], "pop", 3))
+        # (emph lines no longer get an automatic pop: owner 2026-11-27, SE only where they land)
     cues.sort(key=lambda c: (c[0], c[2]))
     seed = zlib.crc32(str(clip.get("id", "")).encode())
     out, used, n_cat = [], list(taken), {}

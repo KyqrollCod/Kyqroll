@@ -188,8 +188,9 @@ def se_catalog():
 _SE_FALLBACK = {"pop": "pop", "whoosh": "whoosh", "impact": "impact", "read": "ding", "fail": "boing",
                 "tsukkomi": "boing", "success": "sparkle", "surprise": "impact", "shock": "boing"}
 # Mix level per category (the list's files are peak-normalized to -4 dBFS; SE stay under the voice).
-SE_LEVEL = {"pop": 0.28, "whoosh": 0.28, "impact": 0.38, "tsukkomi": 0.38, "fail": 0.38, "shock": 0.36,
-            "success": 0.36, "surprise": 0.36, "horror": 0.32, "read": 0.24, "bleep": 0.55}
+# Owner 2026-11-27: SE were too loud / too frequent → about 4 dB lower than the first list.
+SE_LEVEL = {"pop": 0.18, "whoosh": 0.18, "impact": 0.25, "tsukkomi": 0.25, "fail": 0.25, "shock": 0.23,
+            "success": 0.23, "surprise": 0.23, "horror": 0.20, "read": 0.16, "bleep": 0.45}
 
 
 def se_variants(cat):

@@ -105,8 +105,8 @@ def make_thumbnail(src, t, text, st, out_path, sticker=None, style=None, avatar=
         _block(img, lines, f, size, dz, W // 2, int(H * 0.52), anchor="mm")
     elif style == "face":
         _shade(img, "left")
-        _sticker(img, avatar, dz, right=True)
-        f, size = _fit(dz, lines, int(W * 0.60), int(H * 0.80), 200)
+        _sticker(img, avatar, dz, right=True, height=H * 0.92, bottom=0.06, inset=0.70)
+        f, size = _fit(dz, lines, int(W * 0.64), int(H * 0.80), 210)
         _block(img, lines, f, size, dz, 36, H - 30, anchor="ld")
     else:
         _shade(img, "bottom")
@@ -151,7 +151,7 @@ def _font(dz, size):
 
 def _w(f, line):
     d = ImageDraw.Draw(Image.new("L", (1, 1)))
-    return sum(d.textlength(s, font=f) for s, _ in _runs(line.replace("『", "").replace("』", "")))
+    return sum(d.textlength(s, font=_af(f, s)) for s, _ in _split_ascii(_runs(line.replace("『", "").replace("』", ""))))
 
 
 def _fit(dz, lines, max_w, max_h, start):
@@ -171,15 +171,50 @@ def _grad(w, h, c1, c2):
     return Image.composite(b, a, mask)
 
 
+_FW = {c: chr(ord(c) + 0xFEE0) for c in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!?%+&#"}
+
+
+def _split_ascii(runs):
+    """Split runs so ASCII letters/digits become their own pieces (drawn with the Latin face)."""
+    import re as _re
+    out = []
+    for s, k in runs:
+        for piece in _re.findall(r"[0-9A-Za-z%+#&]+|[^0-9A-Za-z%+#&]+", s):
+            out.append((piece, k))
+    return out
+
+
+_AF = {}
+
+
+def _af(f, s):
+    """Font for a piece: ASCII letters/digits use Dela Gothic One (its Latin is compact and as heavy
+    as the kana, owner 2026-11-27: 「1v1」 looked thin), scaled up a little; everything else uses f."""
+    import re as _re
+    if not _re.fullmatch(r"[0-9A-Za-z%+#&]+", s):
+        return f
+    key = (f.path, f.size)
+    if key not in _AF:
+        dela = os.path.join(os.path.dirname(f.path), "DelaGothicOne-Regular.ttf")
+        _AF[key] = ImageFont.truetype(dela if os.path.exists(dela) else f.path, int(f.size * 1.12))
+    return _AF[key]
+
+
+def _full_width(t):
+    """Half-width letters and digits are thin in Japanese display fonts; the full-width forms are as
+    heavy as the kana around them (owner 2026-11-27: 「1v1」 looked thin and lost its punch)."""
+    return "".join(_FW.get(c, c) for c in t)
+
+
 def _text_layer(line, f, size, dz, fill=None):
     """One line: drop shadow, thin outer edge, thick black outline, gradient fill (key word in 『』
     gets the key gradient, the brackets themselves are dropped)."""
     from PIL import ImageFilter
-    runs = [(s, k) for s, k in _runs(line) if s not in ("『", "』")]
-    sw = max(4, int(size * 0.12))
+    runs = _split_ascii([(s, k) for s, k in _runs(line) if s not in ("『", "』")])
+    sw = max(5, int(size * 0.14))
     so = sw + max(3, int(size * 0.05)) if dz.get("outer") else sw
     pad = so + 12
-    w = int(sum(ImageDraw.Draw(Image.new("L", (1, 1))).textlength(s, font=f) for s, _ in runs)) + pad * 2
+    w = int(sum(ImageDraw.Draw(Image.new("L", (1, 1))).textlength(s, font=_af(f, s)) for s, _ in runs)) + pad * 2
     h = int(size * 1.25) + pad * 2
     layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     shadow = Image.new("L", (w, h), 0)
@@ -189,13 +224,15 @@ def _text_layer(line, f, size, dz, fill=None):
     x = pad
     fills = []
     for s, key in runs:
-        ds.text((x + 5, pad + 7), s, font=f, fill=255, stroke_width=so, stroke_fill=255)
-        do.text((x, pad), s, font=f, fill=255, stroke_width=so, stroke_fill=255)
-        di.text((x, pad), s, font=f, fill=255, stroke_width=sw, stroke_fill=255)
+        fo = _af(f, s)
+        yo = pad - (int(f.size * 0.10) if fo is not f else 0)
+        ds.text((x + 5, yo + 7), s, font=fo, fill=255, stroke_width=so, stroke_fill=255)
+        do.text((x, yo), s, font=fo, fill=255, stroke_width=so, stroke_fill=255)
+        di.text((x, yo), s, font=fo, fill=255, stroke_width=sw, stroke_fill=255)
         m = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(m).text((x, pad), s, font=f, fill=255)
+        ImageDraw.Draw(m).text((x, yo), s, font=fo, fill=255)
         fills.append((m, dz["key"] if key else (fill or dz["text"])))
-        x += ImageDraw.Draw(Image.new("L", (1, 1))).textlength(s, font=f)
+        x += ImageDraw.Draw(Image.new("L", (1, 1))).textlength(s, font=fo)
     layer.paste(Image.new("RGBA", (w, h), (0, 0, 0, 150)), (0, 0), shadow.filter(ImageFilter.GaussianBlur(6)))
     if dz.get("outer"):
         layer.paste(Image.new("RGBA", (w, h), dz["outer"]), (0, 0), outer)
@@ -241,7 +278,7 @@ def _vignette(img):
     return Image.composite(img, Image.new("RGB", (W, H), (0, 0, 0)), m)
 
 
-def _sticker(img, art_path, dz, right=True, height=None, bottom=0.10):
+def _sticker(img, art_path, dz, right=True, height=None, bottom=0.10, inset=0.80):
     """The streamer's art as a cut-out sticker: white outline + soft shadow, big on one side."""
     from PIL import ImageFilter
     W, H = img.size
@@ -250,7 +287,7 @@ def _sticker(img, art_path, dz, right=True, height=None, bottom=0.10):
     art = art.resize((int(art.width * r), int(art.height * r)), Image.LANCZOS)
     a = art.split()[3]
     edge = a.filter(ImageFilter.MaxFilter(17))
-    x = W - int(art.width * 0.80) if right else -int(art.width * 0.2)
+    x = W - int(art.width * inset) if right else -int(art.width * (1 - inset))
     y = H - art.height + int(H * bottom)
     sh = Image.new("RGBA", art.size, (0, 0, 0, 0))
     sh.putalpha(edge.filter(ImageFilter.GaussianBlur(10)).point(lambda v: int(v * 0.6)))
@@ -360,27 +397,40 @@ def _tag(img, dz):
     d.text((18 + 15, 16 + 23), txt, font=f, fill="#FFFFFF", anchor="lm")
 
 
-def make_short_cover(src, t, text, st, out_path, avatar=None, seed="", palette=None, font=None):
-    """Vertical cover for a Short (1080x1920), in the same family as the long thumbnails: the payoff
-    frame zoomed to fill, a huge outlined headline (the hook, key word in 『』 as a gradient) in the
-    upper third, the streamer's art as a sticker bottom-right, the channel tag. Owner 2026-11-26:
-    the Short's thumbnail must show what the clip is and stand out (not the Twitch end card)."""
+def make_short_cover(src, t, text, st, out_path, avatar=None, seed="", palette=None, font=None, focus=None):
+    """Vertical cover for a Short (1080x1920). Owner 2026-11-27: the first version was weak (small
+    text, dark frame). Now: the payoff frame zoomed in and brightened so the situation reads at a
+    glance, a huge two-line headline on a dark plate across the top (the second line, the payoff,
+    in the key gradient), the streamer's art small in a corner as a reaction, the channel tag."""
     from PIL import ImageEnhance
     W, H = 1080, 1920
     dz = design(st, seed, font, palette, "caption")
-    img = _cover(lift_dark(grab_frame(src, t)), W, H)
-    img = ImageEnhance.Color(img).enhance(1.25)
-    img = ImageEnhance.Contrast(img).enhance(1.08).convert("RGBA")
-    # darken the top for the headline and the bottom for the sticker
-    g = Image.linear_gradient("L")
-    top = g.rotate(180).resize((W, int(H * 0.45))).point(lambda v: int(v * 0.75))
-    img.alpha_composite(Image.merge("RGBA", (*[Image.new("L", top.size, 0)] * 3, top)), (0, 0))
-    _shade(img, "bottom")
-    lines = _lines(str(text).replace("\\n", "\n"), 3, split_at=6)
-    f, size = _fit(dz, lines, W - 70, int(H * 0.30), 230)
-    _block(img, lines, f, size, dz, W // 2, int(H * 0.08) + int(size * 1.08 * len(lines)), anchor="md")
+    fr = lift_dark(grab_frame(src, t), target=120.0)
+    fx, fy = focus or (0.5, 0.5)
+    z = 1.35                                           # zoom into the action
+    cw, ch = int(fr.width / z), int(fr.height / z)
+    x0 = int(min(max(0, fr.width * fx - cw / 2), fr.width - cw))
+    y0 = int(min(max(0, fr.height * fy - ch / 2), fr.height - ch))
+    img = _cover(fr.crop((x0, y0, x0 + cw, y0 + ch)), W, H)
+    img = ImageEnhance.Color(img).enhance(1.3)
+    img = ImageEnhance.Contrast(img).enhance(1.12)
+    img = ImageEnhance.Brightness(img).enhance(1.08).convert("RGBA")
+    raw = [x for x in str(text).replace("\\n", "\n").split("\n") if x.strip()]
+    if len(raw) == 1:
+        raw = _lines(raw[0], 2, split_at=7)
+    if len(raw) >= 2 and not any("『" in x for x in raw):
+        raw = raw[:-1] + ["『" + raw[-1] + "』"]          # the payoff line gets the key colour
+    lines = raw[:3]
+    f, size = _fit(dz, lines, W - 60, int(H * 0.27), 270)
+    plate_h = int(size * 1.08 * len(lines) + size * 0.75)
+    plate = Image.new("RGBA", (W, plate_h + 40), (0, 0, 0, 0))
+    ImageDraw.Draw(plate).rectangle([0, 0, W, plate_h], fill=(0, 0, 0, 175))
+    g = Image.linear_gradient("L").resize((W, 40)).point(lambda v: int(175 * (255 - v) / 255))
+    plate.paste(Image.new("RGBA", (W, 40), (0, 0, 0, 175)), (0, plate_h), g)
+    img.alpha_composite(plate, (0, int(H * 0.05)))
+    _block(img, lines, f, size, dz, W // 2, int(H * 0.05) + int(size * 0.35) + int(size * 1.08 * len(lines)), anchor="md")
     if avatar and os.path.exists(avatar):
-        _sticker(img, avatar, dz, right=True, height=H * 0.42, bottom=0.04)
-    _tag(img, {**dz, "font": dz["font"]})
+        _sticker(img, avatar, dz, right=True, height=H * 0.26, bottom=0.02, inset=0.78)
+    _tag(img, dz)
     img.convert("RGB").save(out_path, quality=92)
     return out_path
