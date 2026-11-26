@@ -162,7 +162,7 @@ def cmd_render(a):
             za = zs[0].get("at") if zs and isinstance(zs[0], dict) else None
             a_, b_ = float(c["start"]), float(c["end"])
             t_cov = c.get("cover_at") or best_frame(c.get("source") or source_path(wd),
-                                                    *((float(za) - 3, float(za) + 3) if za else (a_ + (b_ - a_) * 0.35, b_ - 1)))
+                                                    *((float(za) - 5, float(za) + 1) if za else (a_ + (b_ - a_) * 0.25, b_ - (b_ - a_) * 0.2)))
             try:
                 r["cover"] = make_short_cover(c.get("source") or source_path(wd), float(t_cov),
                                               c.get("cover_text") or c["hook"], st,

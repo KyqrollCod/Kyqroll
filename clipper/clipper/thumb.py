@@ -138,11 +138,35 @@ def _lines(text, max_lines, split_at=9):
         elif 0 <= e < len(s) - 2:
             cut = e + 1
         else:
-            cut = len(s) // 2
-            while cut < len(s) - 1 and s[cut] in "』」）！？ー〜、。ゃゅょっャュョッ":
-                cut += 1
+            cut = _jp_cut(s)
         lines = [s[:cut], s[cut:]]
     return lines[:max_lines]
+
+
+def _jp_cut(s):
+    """Where to break a Japanese line in two: right after a particle or punctuation (が/を/に/で/は/
+    の/と/へ/も/て/、/！/？/→/…) closest to the middle, never inside a word (owner 2026-11-27:
+    「マニュア／ル係」「顔でボタ／ン」). Falls back to the middle, nudged off small kana."""
+    mid = len(s) / 2
+    best = None
+    for i in range(2, len(s) - 1):
+        if s[i - 1] in "がをにではのとへもて、！？!?→…" and s[i] not in "』」）！？!?ー〜、。ゃゅょっャュョッ":
+            if best is None or abs(i - mid) < abs(best - mid):
+                best = i
+    if best is not None and abs(best - mid) <= len(s) * 0.3:
+        return best
+    # next best: a word start (hiragana followed by kanji / katakana), e.g. 喋り疲れた｜直後に
+    def kind(c):
+        return "h" if "ぁ" <= c <= "ゟ" else ("k" if ("一" <= c <= "鿿" or "ァ" <= c <= "ヿ") else "o")
+    ws = [i for i in range(2, len(s) - 1) if kind(s[i - 1]) == "h" and kind(s[i]) == "k"]
+    if ws:
+        w = min(ws, key=lambda i: abs(i - mid))
+        if abs(w - mid) <= len(s) * 0.3:
+            return w
+    cut = len(s) // 2
+    while cut < len(s) - 1 and s[cut] in "』」）！？ー〜、。ゃゅょっャュョッ":
+        cut += 1
+    return cut
 
 
 def _font(dz, size):
@@ -405,7 +429,7 @@ def make_short_cover(src, t, text, st, out_path, avatar=None, seed="", palette=N
     from PIL import ImageEnhance
     W, H = 1080, 1920
     dz = design(st, seed, font, palette, "caption")
-    fr = lift_dark(grab_frame(src, t), target=120.0)
+    fr = lift_dark(grab_frame(src, t), target=125.0, max_gain=3.0)
     fx, fy = focus or (0.5, 0.5)
     z = 1.35                                           # zoom into the action
     cw, ch = int(fr.width / z), int(fr.height / z)
@@ -456,7 +480,7 @@ def best_frame(src, a, b, n=10):
         rg, yb = x[..., 0] - x[..., 1], 0.5 * (x[..., 0] + x[..., 1]) - x[..., 2]
         colour = float(np.sqrt(rg.std() ** 2 + yb.std() ** 2) + 0.3 * np.sqrt(rg.mean() ** 2 + yb.mean() ** 2))
         edges = float(np.asarray(im.convert("L").filter(ImageFilter.FIND_EDGES), dtype=np.float32).mean())
-        score = lum.std() * 0.6 + colour * 0.8 + edges * 2.0
+        score = lum.std() * 0.6 + colour * 0.8 + edges * 2.0 + min(lum.mean(), 140) * 0.25
         if score > best:
             best, best_t = score, t
     return best_t
