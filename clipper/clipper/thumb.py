@@ -434,3 +434,29 @@ def make_short_cover(src, t, text, st, out_path, avatar=None, seed="", palette=N
     _tag(img, dz)
     img.convert("RGB").save(out_path, quality=92)
     return out_path
+
+
+def best_frame(src, a, b, n=10):
+    """Pick the most telling frame in [a, b] for a cover: not too dark or washed out, colourful and
+    detailed (a fight, a car, a board) rather than a wall, a black loading screen or a menu of text.
+    Score = contrast + colourfulness + edge density, with dark/blank frames rejected."""
+    import numpy as np
+    from PIL import ImageFilter
+    best, best_t = -1.0, (a + b) / 2
+    for k in range(n):
+        t = a + (b - a) * (k + 0.5) / n
+        try:
+            im = grab_frame(src, t).resize((320, 180))
+        except Exception:
+            continue
+        x = np.asarray(im, dtype=np.float32)
+        lum = x.mean(axis=2)
+        if lum.mean() < 35 or lum.mean() > 225:
+            continue
+        rg, yb = x[..., 0] - x[..., 1], 0.5 * (x[..., 0] + x[..., 1]) - x[..., 2]
+        colour = float(np.sqrt(rg.std() ** 2 + yb.std() ** 2) + 0.3 * np.sqrt(rg.mean() ** 2 + yb.mean() ** 2))
+        edges = float(np.asarray(im.convert("L").filter(ImageFilter.FIND_EDGES), dtype=np.float32).mean())
+        score = lum.std() * 0.6 + colour * 0.8 + edges * 2.0
+        if score > best:
+            best, best_t = score, t
+    return best_t

@@ -157,16 +157,18 @@ def cmd_render(a):
         if c.get("format", "short") == "short" and (c.get("cover_text") or c.get("hook")):
             # Vertical cover for the Short (owner 2026-11-26: thumbnail must show the content, not the
             # Twitch end card). Frame: cover_at, else the first zoom (the payoff), else the middle.
-            from .thumb import make_short_cover
+            from .thumb import best_frame, make_short_cover
             zs = c.get("zoom") or []
-            t_cov = c.get("cover_at") or (zs[0].get("at") if zs and isinstance(zs[0], dict) else None) or \
-                (float(c["start"]) + float(c["end"])) / 2
+            za = zs[0].get("at") if zs and isinstance(zs[0], dict) else None
+            a_, b_ = float(c["start"]), float(c["end"])
+            t_cov = c.get("cover_at") or best_frame(c.get("source") or source_path(wd),
+                                                    *((float(za) - 3, float(za) + 3) if za else (a_ + (b_ - a_) * 0.35, b_ - 1)))
             try:
                 r["cover"] = make_short_cover(c.get("source") or source_path(wd), float(t_cov),
                                               c.get("cover_text") or c["hook"], st,
                                               os.path.join(out_dir, f"{c['id']}_cover.jpg"),
                                               avatar=c.get("avatar") or pkg.get("avatar"),
-                                              seed=f"{os.path.basename(wd)}:{c['id']}")
+                                              seed=f"{os.path.basename(wd)}:{c['id']}", focus=c.get("cover_focus"))
             except Exception as e:   # a cover must never fail the build
                 print(f"  {c['id']}: 表紙を作れませんでした（{e}）")
         if c.get("format") == "long" and c.get("thumbnail_text"):
