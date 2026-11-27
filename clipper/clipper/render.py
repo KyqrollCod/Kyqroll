@@ -215,7 +215,7 @@ def render_clip(wd, clip, st, gl, out_path, words):
         ends = [float(l["end"]) for l in clip["subs"] if l.get("end") is not None]
         keeps = [float(k[1]) for k in clip.get("keep") or []]
         if ends:
-            new_end = max(max(ends) + 1.0, (max(keeps) + 0.5) if keeps else 0.0)
+            new_end = max(max(ends) + 1.3, (max(keeps) + 0.5) if keeps else 0.0)   # 1.3 s: the aligned end of the last line can run short
             if new_end < float(clip["end"]) - 1.5 and new_end - float(clip["start"]) >= 15.0:
                 print(f"  {clip.get('id')}: オチの後を {float(clip['end']) - new_end:.1f}秒カット")
                 clip = {**clip, "end": round(new_end, 3)}
