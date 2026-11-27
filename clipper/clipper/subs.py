@@ -194,6 +194,9 @@ def align_script(words, start, end, script, speech=None):
             m = re.match(r"@([^:：\s]+)[:：]\s*", text)   # "@男性:テキスト" forces the speaker
             spk = m.group(1) if m else None
             text = text[m.end():] if m else text
+            if text[:1] in "*!~":   # "@相手:*…" — a marker after the speaker prefix (it used to show on screen)
+                raw = text[:1] + raw
+                text = text.lstrip("*!~").strip()
             key = _akey(text)
             # '*' emphasis, '!' shout (bigger, shaken, red), '~' whisper / inner voice (small, faint)
             tone = "shout" if raw.startswith("!") else "whisper" if raw.startswith("~") else raw.startswith("*")
