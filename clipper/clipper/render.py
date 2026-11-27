@@ -209,6 +209,16 @@ def trim_lead_filler(clip, words, max_skip=3.0, min_left=10.0):
 
 def render_clip(wd, clip, st, gl, out_path, words):
     fmt = clip.get("format", "short")
+    if fmt == "short" and clip.get("tail_trim", True) and clip.get("subs") and not clip.get("segments"):
+        # End right after the punchline (content review 2026-11-27: "オチの後が長い" on many Shorts):
+        # the last spoken line + 1.0 s, or the end of the last keep (a visual payoff) + 0.5 s.
+        ends = [float(l["end"]) for l in clip["subs"] if l.get("end") is not None]
+        keeps = [float(k[1]) for k in clip.get("keep") or []]
+        if ends:
+            new_end = max(max(ends) + 1.0, (max(keeps) + 0.5) if keeps else 0.0)
+            if new_end < float(clip["end"]) - 1.5 and new_end - float(clip["start"]) >= 15.0:
+                print(f"  {clip.get('id')}: オチの後を {float(clip['end']) - new_end:.1f}秒カット")
+                clip = {**clip, "end": round(new_end, 3)}
     if fmt == "short" and clip.get("lead_trim", True) and words and not clip.get("segments"):
         new = trim_lead_filler(clip, words)
         if new != float(clip["start"]):
